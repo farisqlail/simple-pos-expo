@@ -1,45 +1,59 @@
-import { Tabs } from 'expo-router';
-import React from 'react';
-import { Platform } from 'react-native';
-
-import { HapticTab } from '@/components/HapticTab';
-import { IconSymbol } from '@/components/ui/IconSymbol';
-import TabBarBackground from '@/components/ui/TabBarBackground';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+// app/(tabs)/_layout.tsx
+import React, { useState } from "react";
+import { View } from "react-native";
+import { Stack, useRouter } from 'expo-router';
+import BottomNav, { NavItem } from '@/components/ui/BottomNav';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState('beranda');
+  
+  const navItems: Omit<NavItem, 'onPress'>[] = [
+    {
+      id: 'beranda',
+      label: 'Beranda',
+      icon: 'home-outline',
+    },
+    {
+      id: 'transaksi',
+      label: 'Transaksi', 
+      icon: 'card-outline',
+    },
+    {
+      id: 'riwayat',
+      label: 'Riwayat',
+      icon: 'time-outline', 
+    },
+  ];
+
+  const handleNavigation = (id: string) => {
+    setActiveTab(id);
+    
+    // Navigate berdasarkan id
+    if (id === 'beranda') {
+      router.push('/(tabs)/' as any);
+    } else {
+      router.push(`/(tabs)/${id}` as any);
+    }
+  };
 
   return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
-        headerShown: false,
-        tabBarButton: HapticTab,
-        tabBarBackground: TabBarBackground,
-        tabBarStyle: Platform.select({
-          ios: {
-            // Use a transparent background on iOS to show the blur effect
-            position: 'absolute',
-          },
-          default: {},
-        }),
-      }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+    <View style={{ flex: 1 }}>
+      <Stack
+        screenOptions={{
+          headerShown: false,
         }}
       />
-      <Tabs.Screen
-        name="explore"
-        options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
-        }}
+      
+      <BottomNav
+        items={navItems.map(item => ({
+          ...item,
+          onPress: () => handleNavigation(item.id)
+        }))}
+        activeId={activeTab}
+        activeColor="#ef4444"
+        inactiveColor="#6b7280"
       />
-    </Tabs>
+    </View>
   );
 }
