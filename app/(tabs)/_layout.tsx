@@ -28,12 +28,10 @@ export default function TabLayout() {
 
   const handleNavigation = (id: string) => {
     setActiveTab(id);
-    
-    // Navigate berdasarkan id
     if (id === 'beranda') {
       router.push('/(tabs)/' as any);
-    } else {
-      router.push(`/(tabs)/${id}` as any);
+    } else if(id === 'transaksi') {
+      router.push('/(tabs)/transactions/' as any)
     }
   };
 
