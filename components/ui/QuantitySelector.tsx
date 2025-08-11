@@ -1,10 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  TextInput,
-} from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 interface QuantitySelectorProps {
@@ -24,41 +19,22 @@ const QuantitySelector: React.FC<QuantitySelectorProps> = ({
   step = 1,
   size = "medium",
 }) => {
-  const [inputValue, setInputValue] = useState(value.toString());
   const [isEditing, setIsEditing] = useState(false);
 
-  // ✅ FIX: Use correct return type for browser timers
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const intervalTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Size configurations
   const sizeConfig = {
-    small: {
-      buttonSize: "w-8 h-8",
-      iconSize: 14,
-      textSize: "text-sm",
-      spacing: "mx-3",
-    },
-    medium: {
-      buttonSize: "w-10 h-10",
-      iconSize: 16,
-      textSize: "text-lg",
-      spacing: "mx-4",
-    },
-    large: {
-      buttonSize: "w-12 h-12",
-      iconSize: 20,
-      textSize: "text-xl",
-      spacing: "mx-5",
-    },
+    small: { buttonSize: 32, iconSize: 14, fontSize: 14 },
+    medium: { buttonSize: 40, iconSize: 16, fontSize: 18 },
+    large: { buttonSize: 48, iconSize: 20, fontSize: 20 },
   };
 
   const config = sizeConfig[size];
 
-  // Update input value if not editing
   useEffect(() => {
     if (!isEditing) {
-      setInputValue(value.toString());
+      // bisa dipakai kalau ada input edit manual
     }
   }, [value, isEditing]);
 
@@ -74,7 +50,6 @@ const QuantitySelector: React.FC<QuantitySelectorProps> = ({
 
   const startLongPress = (action: "increase" | "decrease") => {
     clearTimers();
-
     longPressTimer.current = setTimeout(() => {
       intervalTimer.current = setInterval(() => {
         action === "increase" ? handleIncrease() : handleDecrease();
@@ -93,93 +68,94 @@ const QuantitySelector: React.FC<QuantitySelectorProps> = ({
     }
   };
 
-  const handleInputChange = (text: string) => {
-    const numericText = text.replace(/[^0-9]/g, "");
-    setInputValue(numericText);
-  };
-
-  const handleInputSubmit = () => {
-    const numericValue = parseInt(inputValue) || min;
-    const clampedValue = Math.max(min, Math.min(max, numericValue));
-    onChange(clampedValue);
-    setInputValue(clampedValue.toString());
-    setIsEditing(false);
-  };
-
-  const handleInputFocus = () => {
-    setIsEditing(true);
-  };
-
-  const handleInputBlur = () => {
-    handleInputSubmit();
-  };
-
   const isMinValue = value <= min;
   const isMaxValue = value >= max;
 
   return (
-    <View className="flex-row items-center border w-full justify-between p-1 rounded-lg">
-      {/* Decrease Button */}
+    <View style={[styles.container, { height: "auto" }]}>
+      {/* Minus */}
       <TouchableOpacity
         onPress={handleDecrease}
         onPressIn={() => !isMinValue && startLongPress("decrease")}
         onPressOut={clearTimers}
         disabled={isMinValue}
-        className={`${config.buttonSize} rounded-lg items-center justify-center p-4 ${
-          isMinValue ? "bg-gray-200" : "bg-[#FEE2E2] active:bg-[#FEE2E2]"
-        }`}
-        activeOpacity={0.7}
-      >
+        style={[
+          styles.button,
+          {
+            backgroundColor: isMinValue ? "#E0E0E0" : "#FEE2E2",
+            width: config.buttonSize,
+            height: config.buttonSize,
+            borderRadius: 10
+          },
+        ]}
+        activeOpacity={0.7}>
         <Ionicons
           name="remove"
           size={config.iconSize}
-          color={isMinValue ? "#9CA3AF" : "#EF4444"}
+          color={isMinValue ? "#6A6A6A" : "#B81D1D"}
         />
       </TouchableOpacity>
 
-      {/* Quantity Input */}
-      <View className={config.spacing}>
-        {isEditing ? (
-          <TextInput
-            value={inputValue}
-            onChangeText={handleInputChange}
-            onSubmitEditing={handleInputSubmit}
-            onBlur={handleInputBlur}
-            keyboardType="numeric"
-            selectTextOnFocus
-            className={`${config.textSize} font-semibold text-center text-gray-800 min-w-[40px] px-2 py-1 border border-gray-300 rounded`}
-            style={{ minWidth: 40 }}
-          />
-        ) : (
-          <TouchableOpacity onPress={() => setIsEditing(true)}>
-            <Text
-              className={`${config.textSize} font-semibold text-gray-800 text-center min-w-[40px]`}
-            >
-              {value}
-            </Text>
-          </TouchableOpacity>
-        )}
+      {/* Value */}
+      <View style={styles.valueContainer}>
+        <Text style={[styles.valueText, { fontSize: config.fontSize }]}>
+          {value}
+        </Text>
       </View>
 
-      {/* Increase Button */}
+      {/* Plus */}
       <TouchableOpacity
         onPress={handleIncrease}
         onPressIn={() => !isMaxValue && startLongPress("increase")}
         onPressOut={clearTimers}
         disabled={isMaxValue}
-        className={`${config.buttonSize} rounded-lg items-center justify-center p-4 ${
-          isMaxValue ? "bg-gray-200" : "bg-red-600 active:bg-red-600"
-        }`}
-        activeOpacity={0.7}
-      >
+        style={[
+          styles.button,
+          {
+            backgroundColor: isMaxValue ? "#E5E7EB" : "#DC2626",
+            width: config.buttonSize,
+            height: config.buttonSize,
+            borderRadius: 10
+          },
+        ]}
+        activeOpacity={0.7}>
         <Ionicons
           name="add"
           size={config.iconSize}
-          color={isMaxValue ? "#9CA3AF" : "white"}
+          color={isMaxValue ? "#9CA3AF" : "#FFFFFF"}
         />
       </TouchableOpacity>
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 8,
+    overflow: "hidden",
+    paddingTop: 5,
+    paddingBottom: 5,
+    paddingLeft: 5,
+    paddingRight: 5,
+  },
+  button: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  valueContainer: {
+    paddingHorizontal: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  valueText: {
+    fontWeight: "600",
+    color: "#1F2937",
+  },
+});
 
 export default QuantitySelector;

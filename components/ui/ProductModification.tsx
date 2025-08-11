@@ -5,23 +5,111 @@ import {
   Image,
   TouchableOpacity,
   ScrollView,
-  ImageSourcePropType,
   Modal,
   StatusBar,
+  Switch,
+  StyleSheet,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import QuantitySelector from "./QuantitySelector";
+
+interface Option {
+  name: string;
+  price: number;
+}
 
 interface ProductModificationProps {
   productName: string;
   productPrice: string;
   originalPrice?: string;
   discount?: string;
-  productImage: ImageSourcePropType;
+  productImage: any;
+  sizeOptions?: Option[];
+  sugarOptions?: Option[];
+  toppingOptions?: Option[];
   isVisible: boolean;
   onClose: () => void;
   onSave?: (modifications: any) => void;
 }
+
+const OptionSection = ({
+  title,
+  note,
+  options,
+  selected,
+  setSelected,
+  multiple = false,
+  toggleMultiple,
+}: {
+  title: string;
+  note: string;
+  options: Option[];
+  selected: string | string[];
+  setSelected?: (val: string) => void;
+  multiple?: boolean;
+  toggleMultiple?: (val: string) => void;
+}) => {
+  if (!options.length) return null;
+  return (
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        <Text
+          style={
+            note.includes("Wajib")
+              ? styles.sectionRequired
+              : styles.sectionOptional
+          }>
+          {note}
+        </Text>
+      </View>
+      {options.map((opt, idx) => {
+        const isSelected = multiple
+          ? (selected as string[]).includes(opt.name)
+          : selected === opt.name;
+        return (
+          <TouchableOpacity
+            key={opt.name}
+            onPress={() =>
+              multiple
+                ? toggleMultiple && toggleMultiple(opt.name)
+                : setSelected && setSelected(opt.name)
+            }
+            style={[
+              styles.optionRow,
+              idx < options.length - 1 && styles.optionBorder,
+            ]}>
+            <View style={styles.optionLeft}>
+              {multiple ? (
+                <View
+                  style={[
+                    styles.checkbox,
+                    isSelected && styles.checkboxSelected,
+                  ]}>
+                  {isSelected && (
+                    <Ionicons name="checkmark" size={12} color="white" />
+                  )}
+                </View>
+              ) : (
+                <View
+                  style={[
+                    styles.radioOuter,
+                    isSelected && styles.radioOuterSelected,
+                  ]}>
+                  {isSelected && <View style={styles.radioInner} />}
+                </View>
+              )}
+              <Text style={styles.optionLabel}>{opt.name}</Text>
+            </View>
+            <Text style={styles.optionPrice}>
+              {opt.price === 0 ? "+0" : `+${opt.price.toLocaleString()}`}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+};
 
 const ProductModification: React.FC<ProductModificationProps> = ({
   productName,
@@ -29,58 +117,43 @@ const ProductModification: React.FC<ProductModificationProps> = ({
   originalPrice,
   discount,
   productImage,
+  sizeOptions = [],
+  sugarOptions = [],
+  toppingOptions = [],
   isVisible,
   onClose,
   onSave,
 }) => {
-  const [selectedSize, setSelectedSize] = useState("Small");
-  const [selectedSugar, setSelectedSugar] = useState("Normal");
-  const [selectedToppings, setSelectedToppings] = useState<string[]>(["Boba"]);
+  const [selectedSize, setSelectedSize] = useState(sizeOptions[0]?.name || "");
+  const [selectedSugar, setSelectedSugar] = useState(
+    sugarOptions[0]?.name || ""
+  );
+  const [selectedToppings, setSelectedToppings] = useState<string[]>([]);
   const [quantity, setQuantity] = useState(1);
-  const [isTakeaway, setIsTakeaway] = useState(true);
-
-  const sizeOptions = [
-    { name: "Small", price: 0 },
-    { name: "Medium", price: 3000 },
-    { name: "Large", price: 5000 },
-  ];
-
-  const sugarOptions = [
-    { name: "Less", price: 0 },
-    { name: "Normal", price: 0 },
-    { name: "Extra", price: 5000 },
-  ];
-
-  const toppingOptions = [
-    { name: "Boba", price: 5000 },
-    { name: "Coffee Jelly", price: 4500 },
-    { name: "Grass Jelly", price: 6000 },
-    { name: "Cheese Cream", price: 2000 },
-    { name: "Fruit smoothie", price: 4750 },
-  ];
+  const [isTakeaway] = useState(true);
 
   const toggleTopping = (topping: string) => {
-    if (selectedToppings.includes(topping)) {
-      setSelectedToppings(selectedToppings.filter((t) => t !== topping));
-    } else {
-      if (selectedToppings.length < 3) {
-        setSelectedToppings([...selectedToppings, topping]);
-      }
-    }
+    setSelectedToppings((prev) =>
+      prev.includes(topping)
+        ? prev.filter((t) => t !== topping)
+        : prev.length < 3
+          ? [...prev, topping]
+          : prev
+    );
   };
 
   const calculateTotal = () => {
-    let total = parseInt(productPrice.replace(/\./g, ""));
+    let total = parseInt(productPrice.replace(/\./g, "")) || 0;
+    const findPrice = (opts: Option[], name: string) =>
+      opts.find((o) => o.name === name)?.price || 0;
 
-    const sizePrice =
-      sizeOptions.find((s) => s.name === selectedSize)?.price || 0;
-    const sugarPrice =
-      sugarOptions.find((s) => s.name === selectedSugar)?.price || 0;
-    const toppingsPrice = selectedToppings.reduce((sum, topping) => {
-      return sum + (toppingOptions.find((t) => t.name === topping)?.price || 0);
-    }, 0);
+    total += findPrice(sizeOptions, selectedSize);
+    total += findPrice(sugarOptions, selectedSugar);
+    total += selectedToppings.reduce(
+      (sum, t) => sum + findPrice(toppingOptions, t),
+      0
+    );
 
-    total += sizePrice + sugarPrice + toppingsPrice;
     return total * quantity;
   };
 
@@ -90,195 +163,228 @@ const ProductModification: React.FC<ProductModificationProps> = ({
     <Modal
       visible={isVisible}
       animationType="slide"
-      presentationStyle="fullScreen"
-      onRequestClose={onClose}
-    >
+      presentationStyle="fullScreen">
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-      <View className="flex-1 bg-white">
+      <View style={styles.container}>
         {/* Header */}
-        <View className="flex-row items-center p-4 border-b border-gray-200">
-          <TouchableOpacity onPress={onClose} className="mr-3">
+        <View style={styles.header}>
+          <TouchableOpacity onPress={onClose} style={styles.headerBack}>
             <Ionicons name="chevron-back" size={24} color="#000" />
           </TouchableOpacity>
-          <Text className="text-lg font-semibold">Modifikasi Item</Text>
+          <Text style={styles.headerTitle}>Modifikasi Item</Text>
         </View>
 
-        <ScrollView className="flex-1">
+        <ScrollView style={styles.scrollArea}>
           {/* Product Info */}
-          <View className="flex-row p-4 border-b border-gray-100">
-            <Image
-              source={productImage}
-              className="w-16 h-16 rounded-lg mr-4"
-              resizeMode="cover"
-            />
-            <View className="flex-1">
-              <Text className="text-lg font-semibold text-gray-800">
-                {productName}
-              </Text>
-              <View className="flex-row items-center mt-1">
-                <Text className="text-lg font-bold text-gray-800">
-                  Rp {productPrice}
-                </Text>
-                {originalPrice && (
-                  <Text className="text-sm text-gray-400 line-through ml-2">
-                    {originalPrice}
-                  </Text>
-                )}
-                {discount && (
-                  <Text className="text-sm text-red-500 ml-2">{discount}</Text>
-                )}
-              </View>
-              <View className="flex-row items-center mt-2">
-                <View
-                  className={`w-4 h-4 rounded ${
-                    isTakeaway
-                      ? "bg-gray-300"
-                      : "bg-transparent border border-gray-300"
-                  } mr-2`}
-                />
-                <Text className="text-gray-600">Takeaway</Text>
+          <View style={styles.productCard}>
+            <View style={styles.productRow}>
+              <Image
+                source={productImage}
+                style={styles.productImage}
+                resizeMode="cover"
+              />
+              <View style={styles.productInfo}>
+                <Text style={styles.productName}>{productName}</Text>
+                <View style={styles.priceRow}>
+                  <Text style={styles.productPrice}>Rp {productPrice}</Text>
+                  {originalPrice && (
+                    <Text style={styles.originalPrice}>{originalPrice}</Text>
+                  )}
+                  {discount && <Text style={styles.discount}>{discount}</Text>}
+                </View>
+                <View style={styles.takeawayRow}>
+                  <Switch
+                    value={isTakeaway}
+                    onValueChange={() => {}}
+                    trackColor={{ false: "#E5E7EB", true: "#E5E7EB" }}
+                    thumbColor={isTakeaway ? "#4B5563" : "#9CA3AF"}
+                    style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
+                  />
+                  <Text style={styles.takeawayText}>Takeaway</Text>
+                </View>
               </View>
             </View>
-          </View>
-
-          {/* Notes */}
-          <TouchableOpacity className="flex-row items-center p-4 border-b border-gray-100">
-            <View className="mr-3">
-              <Ionicons name="create-outline" size={20} color="#ccc" />
-            </View>
-            <Text className="text-gray-400">Catatan</Text>
-          </TouchableOpacity>
-
-          {/* Cup Size */}
-          <View className="p-4 border-b border-gray-100">
-            <View className="flex-row items-center mb-3">
-              <Text className="text-base font-semibold">Ukuran Cup</Text>
-              <Text className="text-red-500 ml-2">- Wajib (Pilih 1)</Text>
-            </View>
-            {sizeOptions.map((size) => (
-              <TouchableOpacity
-                key={size.name}
-                onPress={() => setSelectedSize(size.name)}
-                className="flex-row items-center justify-between py-3"
-              >
-                <View className="flex-row items-center">
-                  <View
-                    className={`w-5 h-5 rounded-full border-2 mr-3 ${
-                      selectedSize === size.name
-                        ? "border-red-500 bg-red-500"
-                        : "border-gray-300"
-                    }`}
-                  >
-                    {selectedSize === size.name && (
-                      <View className="w-2 h-2 bg-white rounded-full m-auto" />
-                    )}
-                  </View>
-                  <Text className="text-gray-800">{size.name}</Text>
-                </View>
-                <Text className="text-gray-600">
-                  {size.price === 0 ? "+0" : `+${size.price.toLocaleString()}`}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* Sugar Level */}
-          <View className="p-4 border-b border-gray-100">
-            <View className="flex-row items-center mb-3">
-              <Text className="text-base font-semibold">Takaran Gula</Text>
-              <Text className="text-red-500 ml-2">- Wajib (Pilih 1)</Text>
-            </View>
-            {sugarOptions.map((sugar) => (
-              <TouchableOpacity
-                key={sugar.name}
-                onPress={() => setSelectedSugar(sugar.name)}
-                className="flex-row items-center justify-between py-3"
-              >
-                <View className="flex-row items-center">
-                  <View
-                    className={`w-5 h-5 rounded-full border-2 mr-3 ${
-                      selectedSugar === sugar.name
-                        ? "border-red-500 bg-red-500"
-                        : "border-gray-300"
-                    }`}
-                  >
-                    {selectedSugar === sugar.name && (
-                      <View className="w-2 h-2 bg-white rounded-full m-auto" />
-                    )}
-                  </View>
-                  <Text className="text-gray-800">{sugar.name}</Text>
-                </View>
-                <Text className="text-gray-600">
-                  {sugar.price === 0
-                    ? "+0"
-                    : `+${sugar.price.toLocaleString()}`}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* Toppings */}
-          <View className="p-4 border-b border-gray-100">
-            <View className="flex-row items-center mb-3">
-              <Text className="text-base font-semibold">Topping</Text>
-              <Text className="text-gray-500 ml-2">- Opsional (Max 3)</Text>
-            </View>
-            {toppingOptions.map((topping) => (
-              <TouchableOpacity
-                key={topping.name}
-                onPress={() => toggleTopping(topping.name)}
-                className="flex-row items-center justify-between py-3"
-              >
-                <View className="flex-row items-center">
-                  <View
-                    className={`w-5 h-5 border-2 mr-3 ${
-                      selectedToppings.includes(topping.name)
-                        ? "border-red-500 bg-red-500"
-                        : "border-gray-300"
-                    }`}
-                  >
-                    {selectedToppings.includes(topping.name) && (
-                      <Ionicons name="checkmark" size={12} color="white" />
-                    )}
-                  </View>
-                  <Text className="text-gray-800">{topping.name}</Text>
-                </View>
-                <Text className="text-gray-600">
-                  +{topping.price.toLocaleString()}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </ScrollView>
-
-        {/* Bottom Action */}
-        <View className="p-4 border-t border-gray-200 bg-white">
-          <View className="flex-row items-center justify-between">
-            <View className="flex-1 mr-2">
-              <QuantitySelector value={quantity} onChange={setQuantity} />
-            </View>
-
-            <TouchableOpacity
-              onPress={() => {
-                onSave?.({
-                  size: selectedSize,
-                  sugar: selectedSugar,
-                  toppings: selectedToppings,
-                  quantity,
-                  total: calculateTotal(),
-                });
-                onClose();
-              }}
-              className="bg-red-600 p-4 rounded-lg flex-1 flex-row gap-2 items-center justify-center"
-            >
-              <Ionicons name="bag" size={20} color="white" className="mr-2" />
-              <Text className="text-white font-semibold text-lg">Simpan</Text>
+            <TouchableOpacity style={styles.notesBox}>
+              <Ionicons name="create-outline" size={16} color="#9CA3AF" />
+              <Text style={styles.notesText}>Catatan</Text>
             </TouchableOpacity>
           </View>
+
+          {/* Sections */}
+          <OptionSection
+            title="Ukuran Cup"
+            note="- Wajib (Pilih 1)"
+            options={sizeOptions}
+            selected={selectedSize}
+            setSelected={setSelectedSize}
+          />
+          <OptionSection
+            title="Takaran Gula"
+            note="- Wajib (Pilih 1)"
+            options={sugarOptions}
+            selected={selectedSugar}
+            setSelected={setSelectedSugar}
+          />
+          <OptionSection
+            title="Topping"
+            note="- Opsional (Max 3)"
+            options={toppingOptions}
+            selected={selectedToppings}
+            multiple
+            toggleMultiple={toggleTopping}
+          />
+        </ScrollView>
+
+        {/* Footer */}
+        <View style={styles.footerContainer}>
+          <View style={styles.flexItem}>
+            <QuantitySelector value={quantity} onChange={setQuantity} />
+          </View>
+          <TouchableOpacity
+            onPress={() => {
+              onSave?.({
+                size: selectedSize,
+                sugar: selectedSugar,
+                toppings: selectedToppings,
+                quantity,
+                total: calculateTotal(),
+              });
+              onClose();
+            }}
+            style={[styles.saveButton, styles.flexItem]}
+            activeOpacity={0.8}>
+            <Ionicons name="bag" size={20} color="#FFFFFF" />
+            <Text style={styles.saveButtonText}>Simpan</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </Modal>
   );
 };
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#F9FAFB" },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+    backgroundColor: "#FFFFFF",
+  },
+  headerBack: { marginRight: 12 },
+  headerTitle: { fontSize: 18, fontWeight: "600" },
+  scrollArea: { flex: 1 },
+  productCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 16,
+    margin: 16,
+  },
+  productRow: { flexDirection: "row", alignItems: "center" },
+  productImage: { width: 80, height: 80, borderRadius: 6 },
+  productInfo: { flex: 1, marginLeft: 12 },
+  productName: { fontSize: 20, fontWeight: "600", color: "#1F2937" },
+  priceRow: { flexDirection: "row", alignItems: "center", marginTop: 2 },
+  productPrice: { fontSize: 14, fontWeight: "600", color: "#1F2937" },
+  originalPrice: {
+    fontSize: 14,
+    color: "#9CA3AF",
+    textDecorationLine: "line-through",
+    marginLeft: 8,
+  },
+  discount: { fontSize: 14, color: "#DC2626", marginLeft: 8 },
+  takeawayRow: { flexDirection: "row", alignItems: "center", marginTop: 4 },
+  takeawayText: { color: "#6B7280", fontSize: 12 },
+  notesBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 16,
+  },
+  notesText: { marginLeft: 8, flex: 1, fontSize: 14, color: "#9CA3AF" },
+  section: {
+    marginTop: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+    overflow: "hidden",
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+  },
+  sectionTitle: { fontSize: 16, fontWeight: "600" },
+  sectionRequired: { color: "#DC2626", marginLeft: 8 },
+  sectionOptional: { color: "#6B7280", marginLeft: 8 },
+  optionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  optionBorder: { borderBottomWidth: 1, borderBottomColor: "#F3F4F6" },
+  optionLeft: { flexDirection: "row", alignItems: "center" },
+  radioOuter: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: "#D1D5DB",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  radioOuterSelected: { borderColor: "#DC2626", backgroundColor: "#DC2626" },
+  radioInner: {
+    width: 8,
+    height: 8,
+    backgroundColor: "white",
+    borderRadius: 4,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderWidth: 2,
+    borderColor: "#D1D5DB",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  checkboxSelected: { borderColor: "#DC2626", backgroundColor: "#DC2626" },
+  optionLabel: { color: "#1F2937" },
+  optionPrice: { color: "#4B5563" },
+  footerContainer: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+    backgroundColor: "#FFFFFF",
+    flexDirection: "row",
+    gap: 16,
+  },
+  flexItem: { flex: 1 },
+  saveButton: {
+    backgroundColor: "#DC2626",
+    paddingVertical: 12,
+    borderRadius: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  saveButtonText: {
+    color: "#FFFFFF",
+    fontWeight: "600",
+    fontSize: 16,
+    marginLeft: 8,
+  },
+});
 
 export default ProductModification;
