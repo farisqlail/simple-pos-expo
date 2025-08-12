@@ -37,7 +37,7 @@ const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <View className={`flex-row gap-2 px-4 py-6 ${backgroundColor}`}>
+    <View className={`flex-row gap-2 px-4 py-6 pt-10 ${backgroundColor}`}>
       <View className="w-10 justify-center items-start">
         {showBackButton && (
           <TouchableOpacity
