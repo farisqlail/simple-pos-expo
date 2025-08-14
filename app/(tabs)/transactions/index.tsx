@@ -1,7 +1,15 @@
 // app/(tabs)/transactions/index.tsx
 import React, { useEffect, useMemo, useState } from "react";
-import { Dimensions, ScrollView, View, Text, ActivityIndicator } from "react-native";
+import {
+  Dimensions,
+  ScrollView,
+  View,
+  Text,
+  ActivityIndicator,
+} from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+
+import { useCartStore } from "@/lib/store/useCartStore";
 
 import Header from "@/components/ui/Header";
 import Input from "@/components/ui/Input";
@@ -11,9 +19,13 @@ import productImg from "@/assets/images/produk.png";
 
 import { Ionicons } from "@expo/vector-icons";
 import FloatingCartSummary from "@/components/ui/FloatingCartSummary";
+import { useRouter } from "expo-router";
 
-interface Option { name: string; price: number; }
-
+interface Option {
+  name: string;
+  price: number;
+}
+const addItem = useCartStore((s) => s.addItem);
 interface Product {
   name: string;
   price: string;
@@ -27,8 +39,15 @@ interface Product {
   toppingOptions?: Option[];
 }
 
-interface CachedProducts { cachedAt: number; data: CategoryNode[]; }
-interface CategoryNode { pcategory_id: number; pcategory_name: string; data_products: ProductNode[]; }
+interface CachedProducts {
+  cachedAt: number;
+  data: CategoryNode[];
+}
+interface CategoryNode {
+  pcategory_id: number;
+  pcategory_name: string;
+  data_products: ProductNode[];
+}
 
 interface ModNode {
   mdf_id: number;
@@ -51,7 +70,10 @@ interface ProductNode {
   data_modifiers?: ModNode[]; // <— PENTING: ambil dari API
 }
 
-interface Modification { name: string; value: string | number; }
+interface Modification {
+  name: string;
+  value: string | number;
+}
 
 const STORAGE_KEYS = {
   USER: "auth_user",
@@ -61,26 +83,33 @@ const STORAGE_KEYS = {
 function formatPriceNoRp(n: number | string) {
   const num = typeof n === "string" ? Number(n.replace(/[^\d]/g, "")) : n;
   if (!Number.isFinite(num)) return "0";
-  return new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(num as number);
+  return new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(
+    num as number
+  );
 }
 const normalizeStr = (s: string) =>
-  s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
 
 function toImageProp(url?: string) {
   if (!url) return null;
   if (/^https?:\/\//i.test(url)) return { uri: url };
   if (url.startsWith("data:image")) return { uri: url };
-  if (/^[A-Za-z0-9+/=]+$/.test(url)) return { uri: `data:image/jpeg;base64,${url}` };
+  if (/^[A-Za-z0-9+/=]+$/.test(url))
+    return { uri: `data:image/jpeg;base64,${url}` };
   return null;
 }
 
-// Ambil topping dari data_modifiers:
-// - anggap parent item punya mdf_parent = 0
-// - semua child (mdf_parent !== 0) jadi topping
 function extractToppings(mods?: ModNode[]): Option[] {
   if (!Array.isArray(mods) || mods.length === 0) return [];
   // hanya child + aktif
-  const children = mods.filter((m) => (m.mdf_parent ?? 0) !== 0 && (m.is_active ? m.is_active === "1" : true));
+  const children = mods.filter(
+    (m) =>
+      (m.mdf_parent ?? 0) !== 0 && (m.is_active ? m.is_active === "1" : true)
+  );
   return children.map((m) => ({
     name: m.mdf_name ?? "-",
     price: Number(m.mdf_price ?? 0) || 0,
@@ -90,7 +119,8 @@ function extractToppings(mods?: ModNode[]): Option[] {
 const TransactionScreen = () => {
   const [showModification, setShowModification] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-
+  const router = useRouter();
+  const clearCart = useCartStore((s) => s.clearCart);
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<Product[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -108,7 +138,8 @@ const TransactionScreen = () => {
   const numColumns = 3;
   const horizontalPadding = 16;
   const gap = 8;
-  const itemWidth = (screenWidth - horizontalPadding * 2 - gap * (numColumns - 1)) / numColumns;
+  const itemWidth =
+    (screenWidth - horizontalPadding * 2 - gap * (numColumns - 1)) / numColumns;
 
   useEffect(() => {
     (async () => {
@@ -127,7 +158,10 @@ const TransactionScreen = () => {
         const appid: string | undefined = user?.appid;
         const locId: number = loc?.loc_id ?? 3365;
 
-        if (!appid) throw new Error("APP ID tidak ditemukan di storage. Silakan login ulang.");
+        if (!appid)
+          throw new Error(
+            "APP ID tidak ditemukan di storage. Silakan login ulang."
+          );
 
         const cacheKey = `products:${appid}:${locId}`;
         const rawCache = await AsyncStorage.getItem(cacheKey);
@@ -194,8 +228,46 @@ const TransactionScreen = () => {
     }
   };
 
-  const handleSaveModification = (modifications: Modification[]) => {
-    console.log("Product modifications:", modifications);
+  const handleSaveModification = (mods: {
+    size?: string;
+    sugar?: string;
+    toppings?: string[];
+    quantity: number;
+    total: number;
+  }) => {
+    if (!selectedProduct) return;
+
+    // harga dasar dari string "25.000" → 25000
+    const base =
+      parseInt((selectedProduct.price || "0").replace(/[^\d]/g, "")) || 0;
+
+    // total per unit = total / qty, addons = perUnit - base
+    const perUnit = Math.round(mods.total / Math.max(mods.quantity, 1));
+    const unitAddons = Math.max(perUnit - base, 0);
+
+    // id unik berdasarkan nama + opsi
+    const id = `${selectedProduct.name}|${mods.size || ""}|${mods.sugar || ""}|${(
+      mods.toppings || []
+    )
+      .slice()
+      .sort()
+      .join(",")}`;
+
+    addItem({
+      id,
+      name: selectedProduct.name,
+      unitBasePrice: base,
+      unitAddonsPrice: unitAddons,
+      quantity: mods.quantity,
+      note: {
+        size: mods.size,
+        sugar: mods.sugar,
+        toppings: mods.toppings,
+        takeaway: true, // contoh
+      },
+    });
+
+    setShowModification(false);
   };
 
   return (
@@ -235,10 +307,11 @@ const TransactionScreen = () => {
           ) : (
             <View
               className="mt-4"
-              style={{ flexDirection: "row", flexWrap: "wrap", gap }}
-            >
+              style={{ flexDirection: "row", flexWrap: "wrap", gap }}>
               {filteredItems.map((item, index) => (
-                <View key={`${item.name}-${index}`} style={{ width: itemWidth }}>
+                <View
+                  key={`${item.name}-${index}`}
+                  style={{ width: itemWidth }}>
                   <ProductCard
                     name={item.name}
                     price={item.price}
@@ -273,8 +346,8 @@ const TransactionScreen = () => {
       <FloatingCartSummary
         itemCount={8}
         totalPrice={400000}
-        onCancel={() => console.log("Batalkan pressed")}
-        onPay={() => console.log("Bayar pressed")}
+        onCancel={clearCart}
+        onPay={() => router.push("/checkout")}
       />
     </>
   );

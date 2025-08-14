@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -7,150 +7,250 @@ import {
   Modal,
   ScrollView,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useCartStore, CartItem } from "@/lib/store/useCartStore";
 
-const dummyCartItems = [
-  {
-    id: 1,
-    name: "Matcha Latte",
-    price: 25000,
-    quantity: 1,
-  },
-  {
-    id: 2,
-    name: "Matcha Latte",
-    price: 25000,
-    quantity: 1,
-  },
-  {
-    id: 3,
-    name: "Matcha Latte",
-    price: 35000,
-    quantity: 1,
-    note: {
-      size: "Large",
-      sugar: "Normal",
-      toppings: ["Boba", "Grass Jelly", "Coffee Jelly"],
-      message: 'Beri pesan "Happy Birthday" pada cup',
-    },
-  },
-];
+const RED = "#B81D1D";
+const R = (n: number) =>
+  `Rp ${n.toLocaleString("id-ID", { maximumFractionDigits: 0 })}`;
 
-interface FloatingCartSummaryProps {
-  itemCount: number;
-  totalPrice: number;
+const Badge = ({ label }: { label: string }) => (
+  <View style={styles.badge}>
+    <Text style={styles.badgeText}>{label}</Text>
+  </View>
+);
+
+const QtyControl = ({
+  value,
+  onDec,
+  onInc,
+}: {
+  value: number;
+  onDec: () => void;
+  onInc: () => void;
+}) => (
+  <View style={styles.qtyWrap}>
+    <TouchableOpacity style={styles.qtyBtn} onPress={onDec}>
+      <Text style={styles.qtyBtnText}>−</Text>
+    </TouchableOpacity>
+    <Text style={styles.qtyValue}>{value}</Text>
+    <TouchableOpacity style={styles.qtyBtn} onPress={onInc}>
+      <Text style={styles.qtyBtnText}>+</Text>
+    </TouchableOpacity>
+  </View>
+);
+
+const ItemCard = ({
+  item,
+  onDec,
+  onInc,
+  onRemove,
+  onEdit,
+}: {
+  item: CartItem;
+  onDec: () => void;
+  onInc: () => void;
+  onRemove?: () => void;
+  onEdit?: () => void;
+}) => {
+  const unitTotal = item.unitBasePrice + item.unitAddonsPrice;
+  const hasToppings = !!item.note?.toppings?.length;
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardHead}>
+        <Text style={styles.cardTitle} numberOfLines={1}>
+          {item.name}
+        </Text>
+        {item.note?.takeaway ? <Badge label="Takeaway" /> : null}
+      </View>
+
+      <Text style={styles.cardPrice}>{R(unitTotal)}</Text>
+
+      <View style={styles.detailRow}>
+        {item.note?.size ? (
+          <Text style={styles.detailText}>
+            <Text style={styles.detailLabel}>Ukuran Cup </Text>
+            <Text style={styles.detailStrong}>{item.note.size}</Text>
+          </Text>
+        ) : null}
+        {item.note?.sugar ? (
+          <Text style={[styles.detailText, { marginLeft: 12 }]}>
+            <Text style={styles.detailLabel}>Takaran Gula </Text>
+            <Text style={styles.detailStrong}>{item.note.sugar}</Text>
+          </Text>
+        ) : null}
+      </View>
+
+      {hasToppings ? (
+        <Text style={[styles.detailText, { marginTop: 6 }]}>
+          <Text style={styles.detailLabel}>Topping </Text>
+          <Text style={styles.detailStrong}>
+            {item.note!.toppings!.join(", ")}
+          </Text>
+        </Text>
+      ) : null}
+
+      {item.note?.message ? (
+        <Text style={styles.noteLine}>• {item.note.message}</Text>
+      ) : null}
+
+      <View style={styles.actionsRow}>
+        <View style={{ flexDirection: "row", gap: 18 }}>
+          <TouchableOpacity onPress={onRemove} activeOpacity={0.8}>
+            <Text style={styles.linkDanger}>Hapus</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onEdit} activeOpacity={0.8}>
+            <Text style={styles.linkPrimary}>Edit</Text>
+          </TouchableOpacity>
+        </View>
+
+        <QtyControl value={item.quantity} onDec={onDec} onInc={onInc} />
+      </View>
+    </View>
+  );
+};
+
+interface Props {
   onCancel: () => void;
   onPay: () => void;
+  onEditItem?: (id: string) => void;
+  onAddVariant?: () => void;
 }
 
-const FloatingCartSummary: React.FC<FloatingCartSummaryProps> = ({
-  itemCount,
-  totalPrice,
+const FloatingCartSummary: React.FC<Props> = ({
   onCancel,
   onPay,
+  onEditItem,
+  onAddVariant,
 }) => {
-  const [modalVisible, setModalVisible] = useState(false);
+  const [open, setOpen] = useState(false);
+  const items = useCartStore((s) => s.items);
+  const incItem = useCartStore((s) => s.incItem);
+  const decItem = useCartStore((s) => s.decItem);
+  const removeItem = useCartStore((s) => s.removeItem);
+
+  const { itemCount, subtotal } = useMemo(() => {
+    let count = 0;
+    let sub = 0;
+    for (const it of items) {
+      count += it.quantity;
+      sub += (it.unitBasePrice + it.unitAddonsPrice) * it.quantity;
+    }
+    return { itemCount: count, subtotal: sub };
+  }, [items]);
 
   return (
     <>
-      {/* Floating Bar */}
-      <View style={styles.container}>
+      {/* Floating bar */}
+      <View style={styles.bar}>
         <View>
-          <TouchableOpacity onPress={() => setModalVisible(true)}>
-            <Text style={styles.itemText}>{itemCount} item</Text>
+          <TouchableOpacity onPress={() => setOpen(true)}>
+            <Text style={styles.barItemText}>{itemCount} item</Text>
           </TouchableOpacity>
-          <Text style={styles.priceText}>
-            Rp {totalPrice.toLocaleString("id-ID")}
-          </Text>
+          <Text style={styles.barPrice}>{R(subtotal)}</Text>
         </View>
 
-        <View style={styles.buttonsContainer}>
-          <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
-            <Text style={styles.cancelText}>Batalkan</Text>
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <TouchableOpacity style={styles.barCancel} onPress={onCancel}>
+            <Text style={styles.barCancelText}>Batalkan</Text>
           </TouchableOpacity>
-
-          <TouchableOpacity style={styles.payButton} onPress={onPay}>
-            <Text style={styles.payText}>Bayar</Text>
+          <TouchableOpacity
+            style={styles.barPay}
+            onPress={() => (itemCount > 0 ? setOpen(true) : null)}
+          >
+            <Text style={styles.barPayText}>Bayar</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Modal Cart */}
+      {/* Modal */}
       <Modal
-        visible={modalVisible}
+        visible={open}
         animationType="slide"
-        transparent={true}
-        onRequestClose={() => setModalVisible(false)}
+        transparent
+        onRequestClose={() => setOpen(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Keranjang Belanja</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <Text style={{ fontSize: 20 }}>✕</Text>
+        <View style={styles.overlay}>
+          <View style={styles.sheet}>
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>Daftar Varian Item</Text>
+              <TouchableOpacity onPress={() => setOpen(false)}>
+                <Ionicons name="close" size={22} color="#111827" />
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={{ flex: 1 }}>
-              {dummyCartItems.map((item) => (
-                <View key={item.id} style={styles.cartItem}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontWeight: "bold" }}>{item.name}</Text>
-                    <Text style={{ color: "#666" }}>
-                      Rp {item.price.toLocaleString("id-ID")}
-                    </Text>
-                    {item.note && (
-                      <Text style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
-                        Ukuran Cup {item.note.size} | Gula {item.note.sugar}{"\n"}
-                        Topping: {item.note.toppings.join(", ")}
-                        {"\n"}
-                        {item.note.message}
-                      </Text>
-                    )}
-                  </View>
-
-                  <View style={styles.qtyContainer}>
-                    <TouchableOpacity style={styles.qtyBtn}>
-                      <Text style={{ color: "#B71C1C" }}>−</Text>
-                    </TouchableOpacity>
-                    <Text style={{ marginHorizontal: 8 }}>{item.quantity}</Text>
-                    <TouchableOpacity style={styles.qtyBtn}>
-                      <Text style={{ color: "#B71C1C" }}>+</Text>
-                    </TouchableOpacity>
-                  </View>
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={{ padding: 14, paddingBottom: 24 }}
+              showsVerticalScrollIndicator={false}
+            >
+              {items.length === 0 ? (
+                <View style={{ padding: 16 }}>
+                  <Text style={{ color: "#6b7280" }}>
+                    Keranjang masih kosong.
+                  </Text>
                 </View>
-              ))}
+              ) : (
+                items.map((it) => (
+                  <ItemCard
+                    key={it.id}
+                    item={it}
+                    onDec={() => decItem(it.id)}
+                    onInc={() => incItem(it.id)}
+                    onRemove={() => removeItem(it.id)}
+                    onEdit={() => onEditItem?.(it.id)}
+                  />
+                ))
+              )}
             </ScrollView>
 
-            {/* Footer Total */}
+            {/* Footer */}
             <View style={styles.footer}>
-              <View style={styles.footerRow}>
-                <Text>Subtotal</Text>
-                <Text>Rp 400.000</Text>
+              <TouchableOpacity
+                style={styles.newVariantBtn}
+                onPress={() => onAddVariant?.()}
+                activeOpacity={0.9}
+              >
+                <Ionicons name="add-circle" size={18} color="#fff" />
+                <Text style={styles.newVariantText}>Buat Varian Baru</Text>
+              </TouchableOpacity>
+
+              <View style={styles.totalRow}>
+                <Text style={{ color: "#374151" }}>Subtotal</Text>
+                <Text style={{ fontWeight: "700" }}>{R(subtotal)}</Text>
               </View>
-              <View style={styles.footerRow}>
-                <Text>Biaya Admin</Text>
-                <Text style={{ color: "red" }}>+ Rp 1.000</Text>
+              <View style={styles.totalRow}>
+                <Text style={{ color: "#374151" }}>Biaya Admin</Text>
+                <Text style={{ color: RED, fontWeight: "700" }}>
+                  + {R(items.length ? 1000 : 0)}
+                </Text>
               </View>
-              <View style={[styles.footerRow, { fontWeight: "bold" }]}>
-                <Text>Total Pembayaran</Text>
-                <Text style={{ fontWeight: "bold" }}>Rp 401.000</Text>
+              <View style={[styles.totalRow, { marginTop: 4 }]}>
+                <Text style={{ fontWeight: "800" }}>Total Pembayaran</Text>
+                <Text style={{ fontWeight: "800" }}>
+                  {R(subtotal + (items.length ? 1000 : 0))}
+                </Text>
               </View>
 
-              <View style={styles.footerButtons}>
+              <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
                 <TouchableOpacity
-                  style={styles.cancelFooterBtn}
-                  onPress={() => setModalVisible(false)}
+                  style={styles.footerCancel}
+                  onPress={() => {
+                    setOpen(false);
+                    onCancel();
+                  }}
                 >
-                  <Text style={{ color: "#B71C1C" }}>Batalkan</Text>
+                  <Text style={{ color: RED, fontWeight: "700" }}>Batalkan</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={styles.payFooterBtn}
+                  style={styles.footerPay}
                   onPress={() => {
-                    setModalVisible(false);
+                    setOpen(false);
                     onPay();
                   }}
                 >
-                  <Text style={{ color: "#fff" }}>Bayar</Text>
+                  <Text style={{ color: "#fff", fontWeight: "800" }}>Bayar</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -162,127 +262,132 @@ const FloatingCartSummary: React.FC<FloatingCartSummaryProps> = ({
 };
 
 const styles = StyleSheet.create({
-  container: {
+  bar: {
     position: "absolute",
-    bottom: 16,
-    left: 16,
-    right: 16,
-    backgroundColor: "#B71C1C",
+    left: 12,
+    right: 12,
+    bottom: 12,
+    backgroundColor: RED,
     borderRadius: 12,
+    padding: 12,
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    elevation: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 10,
+    elevation: 8,
   },
-  itemText: {
-    color: "#fff",
-    fontSize: 12,
-  },
-  priceText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "bold",
-    marginTop: 2,
-  },
-  buttonsContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  cancelButton: {
+  barItemText: { fontWeight: "600", color: "#fff" },
+  barPrice: { marginTop: 2, color: "#fff", fontWeight: "700" },
+  barCancel: {
     borderWidth: 1,
     borderColor: "#fff",
-    borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  cancelText: {
-    color: "#fff",
-    fontSize: 14,
-  },
-  payButton: {
-    backgroundColor: "#fff",
+    paddingVertical: 8,
     borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
   },
-  payText: {
-    color: "#B71C1C",
-    fontSize: 14,
-    fontWeight: "bold",
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "flex-end",
-  },
-  modalContent: {
+  barCancelText: { color: "#fff", fontWeight: "600" },
+  barPay: {
     backgroundColor: "#fff",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  barPayText: { color: RED, fontWeight: "800" },
+
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.35)", justifyContent: "flex-end" },
+  sheet: {
+    backgroundColor: "#fff",
+    maxHeight: "88%",
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
-    maxHeight: "85%",
+    overflow: "hidden",
   },
-  modalHeader: {
+  sheetHeader: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    padding: 16,
-    borderBottomWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "#eee",
   },
-  modalTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  cartItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-  },
-  qtyContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  qtyBtn: {
-    borderWidth: 1,
-    borderColor: "#B71C1C",
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  footer: {
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: "#eee",
+  sheetTitle: { fontSize: 16, fontWeight: "800", color: "#111827" },
+
+  card: {
     backgroundColor: "#fff",
-  },
-  footerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 6,
-  },
-  footerButtons: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 12,
-  },
-  cancelFooterBtn: {
-    flex: 1,
+    borderRadius: 12,
+    padding: 12,
     borderWidth: 1,
-    borderColor: "#B71C1C",
-    borderRadius: 8,
-    alignItems: "center",
-    padding: 12,
+    borderColor: "#EFEFEF",
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 6,
+    elevation: 1,
   },
-  payFooterBtn: {
-    flex: 1,
-    backgroundColor: "#B71C1C",
-    borderRadius: 8,
+  cardHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  cardTitle: { fontWeight: "700", fontSize: 14, color: "#111827", flex: 1, marginRight: 8 },
+  badge: { backgroundColor: "#FEE2E2", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
+  badgeText: { color: RED, fontSize: 11, fontWeight: "700" },
+  cardPrice: { marginTop: 2, color: "#374151", fontWeight: "700" },
+  detailRow: { flexDirection: "row", marginTop: 8, flexWrap: "wrap" },
+  detailText: { color: "#6B7280", fontSize: 12 },
+  detailLabel: { color: "#6B7280" },
+  detailStrong: { color: "#111827", fontWeight: "600" },
+  noteLine: { marginTop: 6, fontSize: 12, color: "#6B7280" },
+
+  actionsRow: {
+    marginTop: 10,
+    flexDirection: "row",
     alignItems: "center",
-    padding: 12,
+    justifyContent: "space-between",
+  },
+  linkDanger: { color: RED, fontWeight: "700" },
+  linkPrimary: { color: "#111827", fontWeight: "700" },
+
+  qtyWrap: { flexDirection: "row", alignItems: "center", gap: 8 },
+  qtyBtn: {
+    backgroundColor: "#FEE2E2",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+  },
+  qtyBtnText: { color: RED, fontWeight: "900", fontSize: 14 },
+  qtyValue: { minWidth: 20, textAlign: "center", fontWeight: "700", color: "#111827" },
+
+  footer: { padding: 16, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#eee" },
+  newVariantBtn: {
+    flexDirection: "row",
+    gap: 6,
+    alignItems: "center",
+    backgroundColor: RED,
+    borderRadius: 10,
+    paddingVertical: 10,
+    justifyContent: "center",
+    marginBottom: 10,
+  },
+  newVariantText: { color: "#fff", fontWeight: "800" },
+  totalRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 6 },
+  footerCancel: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: RED,
+    alignItems: "center",
+  },
+  footerPay: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: RED,
+    alignItems: "center",
   },
 });
 
