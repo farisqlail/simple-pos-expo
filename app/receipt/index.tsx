@@ -1,5 +1,5 @@
 // app/receipt/index.tsx
-import React from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -7,38 +7,16 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
+  ActivityIndicator,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const formatCurrency = (num: number) =>
-  "Rp " + num.toLocaleString("id-ID");
+type TxResponse = any; // bentuk response bisa bervariasi
 
-const storeInfo = {
-  name: "N7 Coffee",
-  address: "Jl Alamat Toko 123",
-  logo: "https://via.placeholder.com/40x40.png?text=N7",
-};
-const transaction = {
-  invoice: "#INV123890912389123098",
-  date: "28/07/2025, 10:45:12",
-  paymentMethod: "Tunai",
-  subtotal: 15000000,
-  adminFee: 1000,
-  total: 14941000,
-  amountReceived: 16941000,
-};
-const items = [
-  {
-    name: "Matcha Latte",
-    price: 25000,
-    qty: 1,
-    details:
-      "Ukuran Cup Large  Takaran Gula Normal\nTopping Boba, Grass Jelly, Coffee Jelly\nBeri pesan “Happy Birthday” pada cup",
-  },
-  { name: "Coffee Latte", price: 25000, qty: 1 },
-  { name: "Red Velvet Latte", price: 25000, qty: 1 },
-];
+const formatCurrency = (num: number = 0) =>
+  "Rp " + (Number(num) || 0).toLocaleString("id-ID");
 
 const RowBetween = ({
   label,
@@ -53,12 +31,7 @@ const RowBetween = ({
 }) => (
   <View style={styles.rowBetween}>
     <Text style={bold && styles.bold}>{label}</Text>
-    <Text
-      style={[
-        bold && styles.bold,
-        valueColor && { color: valueColor },
-      ]}
-    >
+    <Text style={[bold && styles.bold, valueColor && { color: valueColor }]}>
       {value}
     </Text>
   </View>
@@ -66,7 +39,152 @@ const RowBetween = ({
 
 export default function ReceiptScreen() {
   const router = useRouter();
-  const change = transaction.amountReceived - transaction.total;
+  const [loading, setLoading] = useState(true);
+  const [resp, setResp] = useState<TxResponse | null>(null);
+  const [storeName, setStoreName] = useState("N7 Coffee");
+  const [storeAddress, setStoreAddress] = useState("—");
+  const [storeLogo, setStoreLogo] = useState(
+    "https://via.placeholder.com/40x40.png?text=N7"
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      (async () => {
+        try {
+          setLoading(true);
+          const raw = await AsyncStorage.getItem("tx:last_response");
+          const rawLoc = await AsyncStorage.getItem("selected_location");
+          if (rawLoc) {
+            const loc = JSON.parse(rawLoc);
+            setStoreName(loc?.loc_name || "N7 Coffee");
+            setStoreAddress(loc?.loc_addr || "—");
+            setStoreLogo(
+              loc?.loc_logo || "https://via.placeholder.com/40x40.png?text=N7"
+            );
+          }
+          if (!active) return;
+          setResp(raw ? JSON.parse(raw) : null);
+          // Debug optional:
+          console.log("[Receipt] tx:last_response:", raw);
+        } catch (e) {
+          console.log("Load receipt error:", e);
+          setResp(null);
+        } finally {
+          if (active) setLoading(false);
+        }
+      })();
+      return () => {
+        active = false;
+      };
+    }, [])
+  );
+
+  // Ambil field aman dengan fallback
+  const {
+    invoice,
+    date,
+    paymentMethod,
+    subtotal,
+    service,
+    adminFee,
+    total,
+    amountReceived,
+    change,
+    items,
+  } = useMemo(() => {
+    const r = resp ?? {};
+    const data = r?.data ?? {};
+
+    // Nomor nota & tanggal
+    const invoice = data?.no_nota || "#INV-XXXX";
+    const date =
+      data?.tranbayar?.tglsetor ||
+      data?.created_at ||
+      new Date().toLocaleString("id-ID");
+
+    // Items dari data.details
+    const rawDetails = Array.isArray(data?.details) ? data.details : [];
+    const items = rawDetails.map((d: any) => ({
+      name: d?.nmbrg || "-",
+      // harga baris; di respons ada d.totals = total line, d.hgsatmkt = harga satuan
+      price: Number(d?.totals ?? d?.hgsatmkt ?? 0),
+      qty: Number(d?.qty ?? 1),
+      // jika kamu punya modifiers/catatan, bisa disusun di sini
+      details: undefined,
+    }));
+
+    // Subtotal = jumlahkan total per baris dari details
+    const subtotal = rawDetails.reduce(
+      (acc: number, d: any) => acc + Number(d?.totals ?? 0),
+      0
+    );
+
+    // Total dari field gtotal; service = selisih total - subtotal (jika ada)
+    const total = Number(data?.gtotal ?? subtotal);
+    const service = Math.max(total - subtotal, 0);
+    const adminFee = 0; // responsmu tidak ada admin fee → 0
+
+    // Pembayaran
+    const bayar = data?.tranbayar ?? {};
+    const amountReceived = Number(bayar?.jmlBayar ?? 0); // Uang diterima langsung dari API
+    const change = Number(bayar?.jmlKembali ?? 0);
+
+    // Metode pembayaran
+    const paymentMethodRaw = bayar?.payment_method || bayar?.caraBayar || "—";
+    // Normalisasi: kalau "Cash" atau id 19 -> tampilkan "Tunai"
+    const paymentMethod =
+      String(paymentMethodRaw).toLowerCase() === "cash" ||
+      String(paymentMethodRaw) === "19"
+        ? "Tunai"
+        : String(paymentMethodRaw);
+
+    return {
+      storeName,
+      storeAddress,
+      storeLogo,
+      invoice,
+      date,
+      paymentMethod,
+      subtotal,
+      service,
+      adminFee,
+      total,
+      amountReceived,
+      change,
+      items,
+    };
+  }, [resp]);
+
+  if (loading) {
+    return (
+      <View
+        style={[
+          styles.container,
+          { justifyContent: "center", alignItems: "center" },
+        ]}>
+        <ActivityIndicator />
+        <Text style={{ color: "#6b7280", marginTop: 8 }}>Memuat struk…</Text>
+      </View>
+    );
+  }
+
+  if (!resp) {
+    return (
+      <View
+        style={[styles.container, { justifyContent: "center", padding: 16 }]}>
+        <Text style={{ textAlign: "center", marginBottom: 12 }}>
+          Tidak ada data struk ditemukan.
+        </Text>
+        <TouchableOpacity
+          onPress={() => router.push("/(tabs)")}
+          style={styles.newTransactionButton}>
+          <Ionicons name="cart" size={16} color="#fff" />
+          <Text style={styles.newTransactionText}>Transaksi Baru</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -81,66 +199,61 @@ export default function ReceiptScreen() {
         <View style={styles.card}>
           {/* Store Info */}
           <View style={styles.storeRow}>
-            <Image
-              source={{ uri: storeInfo.logo }}
-              style={styles.storeLogo}
-            />
+            <Image source={{ uri: storeLogo }} style={styles.storeLogo} />
             <View>
-              <Text style={styles.storeName}>{storeInfo.name}</Text>
-              <Text style={styles.storeAddress}>{storeInfo.address}</Text>
+              <Text style={styles.storeName}>{storeName}</Text>
+              <Text style={styles.storeAddress}>{storeAddress}</Text>
             </View>
           </View>
 
           <View style={styles.divider} />
 
-          <Text style={styles.invoice}>{transaction.invoice}</Text>
-          <Text style={styles.date}>{transaction.date}</Text>
+          <Text style={styles.invoice}>{invoice}</Text>
+          <Text style={styles.date}>{date}</Text>
 
-          <RowBetween
-            label="Metode Pembayaran"
-            value={transaction.paymentMethod}
-            bold
-          />
-          <RowBetween
-            label="Subtotal"
-            value={formatCurrency(transaction.subtotal)}
-          />
-          <RowBetween
-            label="Biaya Admin"
-            value={`+ ${formatCurrency(transaction.adminFee)}`}
-            valueColor="red"
-          />
-          <RowBetween
-            label="Total Bayar"
-            value={formatCurrency(transaction.total)}
-            bold
-          />
+          <RowBetween label="Metode Pembayaran" value={paymentMethod} bold />
+          <RowBetween label="Subtotal" value={formatCurrency(subtotal)} />
+          {/* tampilkan jika ada admin fee */}
+          {adminFee > 0 ? (
+            <RowBetween
+              label="Biaya Admin"
+              value={`+ ${formatCurrency(adminFee)}`}
+              valueColor="red"
+            />
+          ) : null}
+          {/* tampilkan jika ada service */}
+          {service > 0 ? (
+            <RowBetween
+              label="Service"
+              value={`+ ${formatCurrency(service)}`}
+              valueColor="red"
+            />
+          ) : null}
+          <RowBetween label="Total Bayar" value={formatCurrency(total)} bold />
           <RowBetween
             label="Uang Diterima"
-            value={formatCurrency(transaction.amountReceived)}
+            value={formatCurrency(amountReceived)}
           />
 
           {/* Change */}
           <View style={styles.changeBox}>
             <Text style={styles.changeLabel}>Kembalian</Text>
-            <Text style={styles.changeValue}>
-              {formatCurrency(change)}
-            </Text>
+            <Text style={styles.changeValue}>{formatCurrency(change)}</Text>
           </View>
         </View>
 
         {/* Detail Pembelian */}
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>DETAIL PEMBELIAN</Text>
-          {items.map((item, index) => (
+          {items.map((item: any, index: number) => (
             <View key={index} style={styles.itemWrapper}>
               <RowBetween
                 label={`${item.qty}x ${item.name}`}
                 value={formatCurrency(item.price)}
               />
-              {item.details && (
+              {item.details ? (
                 <Text style={styles.itemDetails}>{item.details}</Text>
-              )}
+              ) : null}
             </View>
           ))}
         </View>
@@ -148,14 +261,17 @@ export default function ReceiptScreen() {
 
       {/* Bottom Buttons */}
       <View style={styles.bottomBar}>
-        <TouchableOpacity style={styles.printButton}>
+        <TouchableOpacity
+          style={styles.printButton}
+          onPress={() => {
+            /* TODO: implementasi cetak */
+          }}>
           <Ionicons name="print" size={16} color="#DA2424" />
           <Text style={styles.printText}>Cetak Struk</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.newTransactionButton}
-          onPress={() => router.push("/(tabs)")}
-        >
+          onPress={() => router.push("/(tabs)")}>
           <Ionicons name="cart" size={16} color="#fff" />
           <Text style={styles.newTransactionText}>Transaksi Baru</Text>
         </TouchableOpacity>
@@ -167,7 +283,7 @@ export default function ReceiptScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F9F9F9" },
   scrollContent: { padding: 16, paddingBottom: 100 },
-  successIcon: { alignItems: "center", marginTop: 10 },
+  successIcon: { alignItems: "center", marginTop: 50 },
   successText: {
     textAlign: "center",
     fontSize: 18,

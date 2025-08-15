@@ -1,11 +1,13 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export type CartItem = {
-  id: string; // unik: kombinasi nama + opsi
+  id: string;               // key unik (nama+opsi)
+  prodId: string;           // ⬅️ WAJIB: id produk utk API
   name: string;
-  unitBasePrice: number;   // harga dasar per unit
-  unitAddonsPrice: number; // total harga addons per unit (size+sugar+toppings)
+  unitBasePrice: number;
+  unitAddonsPrice: number;
   quantity: number;
   note?: {
     size?: string;
@@ -19,10 +21,10 @@ export type CartItem = {
 type CartState = {
   items: CartItem[];
   addItem: (item: CartItem) => void;
-  removeItem: (id: string) => void;
-  incItem: (id: string) => void;
-  decItem: (id: string) => void;
-  clearCart: () => void;
+  inc: (id: string) => void;
+  dec: (id: string) => void;
+  remove: (id: string) => void;
+  clear: () => void;
 };
 
 export const useCartStore = create<CartState>()(
@@ -30,39 +32,35 @@ export const useCartStore = create<CartState>()(
     (set) => ({
       items: [],
       addItem: (item) =>
-        set((state) => {
-          const exist = state.items.find((it) => it.id === item.id);
-          if (exist) {
-            return {
-              items: state.items.map((it) =>
-                it.id === item.id
-                  ? { ...it, quantity: it.quantity + item.quantity }
-                  : it
-              ),
+        set((s) => {
+          // gabungkan kalau id sama
+          const idx = s.items.findIndex((x) => x.id === item.id);
+          if (idx >= 0) {
+            const next = [...s.items];
+            next[idx] = {
+              ...next[idx],
+              quantity: next[idx].quantity + item.quantity,
             };
+            return { items: next };
           }
-          return { items: [...state.items, item] };
+          return { items: [...s.items, item] };
         }),
-      removeItem: (id) =>
-        set((state) => ({ items: state.items.filter((it) => it.id !== id) })),
-      incItem: (id) =>
-        set((state) => ({
-          items: state.items.map((it) =>
-            it.id === id ? { ...it, quantity: it.quantity + 1 } : it
-          ),
+      inc: (id) =>
+        set((s) => ({
+          items: s.items.map((x) => (x.id === id ? { ...x, quantity: x.quantity + 1 } : x)),
         })),
-      decItem: (id) =>
-        set((state) => ({
-          items: state.items
-            .map((it) =>
-              it.id === id
-                ? { ...it, quantity: Math.max(it.quantity - 1, 0) }
-                : it
-            )
-            .filter((it) => it.quantity > 0),
+      dec: (id) =>
+        set((s) => ({
+          items: s.items
+            .map((x) => (x.id === id ? { ...x, quantity: Math.max(1, x.quantity - 1) } : x)),
         })),
-      clearCart: () => set({ items: [] }),
+      remove: (id) => set((s) => ({ items: s.items.filter((x) => x.id !== id) })),
+      clear: () => set({ items: [] }),
     }),
-    { name: "cart-storage" }
+    {
+      name: "cart_v1",
+      storage: createJSONStorage(() => AsyncStorage),
+      version: 1,
+    }
   )
 );

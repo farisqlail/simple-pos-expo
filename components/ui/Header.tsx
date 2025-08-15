@@ -1,7 +1,7 @@
-import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import React from "react";
+import { View, Text, TouchableOpacity } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 
 interface HeaderProps {
   title: string;
@@ -19,11 +19,11 @@ const Header: React.FC<HeaderProps> = ({
   title,
   showBackButton = false,
   onBackPress,
-  backgroundColor = 'bg-red-600',
-  textColor = 'text-white',
-  backIconColor = '#ffffff',
-  style = '',
-  titleStyle = '',
+  backgroundColor = "bg-red-600",
+  textColor = "text-white",
+  backIconColor = "#ffffff",
+  style = "",
+  titleStyle = "",
   rightComponent,
 }) => {
   const router = useRouter();
@@ -37,25 +37,27 @@ const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <View className={`flex-row gap-2 px-4 py-6 pt-10 ${backgroundColor}`}>
+    <View
+      className={`flex-row items-center gap-2 ${backgroundColor}`}
+      style={{ paddingTop: 50, paddingBottom: 20, paddingLeft: 20 }}>
       <View className="w-10 justify-center items-start">
         {showBackButton && (
           <TouchableOpacity
             onPress={handleBackPress}
             className="-ml-2 p-2"
-            activeOpacity={0.7}
-          >
+            activeOpacity={0.7}>
             <Ionicons name="arrow-back" size={24} color={backIconColor} />
           </TouchableOpacity>
         )}
       </View>
 
       <View>
-        <Text className={`text-xl font-semibold text-center ${textColor} ${titleStyle}`}>
+        <Text
+          className={`font-semibold text-center ${textColor}`}
+          style={{ fontSize: 17 }}>
           {title}
         </Text>
       </View>
-
     </View>
   );
 };

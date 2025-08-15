@@ -7,57 +7,41 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Header from "@/components/ui/Header";
 import BottomBar from "@/components/ui/BottomBar";
-import { useCartStore } from "@/lib/store/useCartStore"; // ⬅️ ambil data cart
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useCartStore } from "@/lib/store/useCartStore";
+import { createResource } from "@/lib/api/fetch";
 
 const formatCurrency = (value: number) => `Rp ${value.toLocaleString("id-ID")}`;
 
-const Row = ({ label, value, bold = false, valueColor }: any) => (
-  <View style={styles.row}>
-    <Text style={bold && styles.bold}>{label}</Text>
-    <Text style={[bold && styles.bold, valueColor && { color: valueColor }]}>{value}</Text>
-  </View>
-);
-
-const MoneyButton = ({ amount, isActive, onPress, isFirst }: any) => (
-  <TouchableOpacity
-    style={[styles.moneyButton, isActive && styles.moneyButtonActive]}
-    onPress={onPress}>
-    <Text style={[styles.moneyButtonText, isActive && styles.moneyButtonTextActive]}>
-      {isFirst ? "Uang Pas" : amount.toLocaleString("id-ID")}
-    </Text>
-  </TouchableOpacity>
-);
-
 const Checkout = () => {
   const router = useRouter();
-
-  // ===== Ambil items dari cart store
   const items = useCartStore((s) => s.items);
+  const clearCart = useCartStore((s) => s.clear);
 
-  // ===== Hitung subtotal & itemCount dari cart
   const { subtotal, itemCount } = useMemo(() => {
-    let sub = 0;
-    let count = 0;
+    let sub = 0,
+      count = 0;
     for (const it of items) {
-      const unitTotal = (it.unitBasePrice + it.unitAddonsPrice);
-      sub += unitTotal * it.quantity;
+      const unit = it.unitBasePrice + it.unitAddonsPrice;
+      sub += unit * it.quantity;
       count += it.quantity;
     }
     return { subtotal: sub, itemCount: count };
   }, [items]);
 
-  // Biaya admin contoh (sesuaikan kebijakanmu)
-  const biayaAdmin = items.length ? 1000 : 0;
-  const totalBayar = subtotal + biayaAdmin;
+  const servicePercent = 10; // contoh mengikuti payload
+  const service = Math.round((subtotal * servicePercent) / 100);
+  const adminFee = 0; // contoh
+  const biayaAdmin = adminFee;
+  const totalBayar = subtotal + service + adminFee;
 
-  const [selectedAmount, setSelectedAmount] =
-    useState<number | null>(null);
+  const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
 
-  // Rekomendasi nominal bayar dari total
   const moneyOptions = useMemo(() => {
     const pecahan = [1000, 2000, 5000, 10000, 20000, 50000, 100000];
     const list: number[] = [totalBayar + 1000];
@@ -68,40 +52,194 @@ const Checkout = () => {
     return list.sort((a, b) => a - b);
   }, [totalBayar]);
 
+  // === Submit transaksi
+  const onSubmit = async () => {
+    try {
+      if (!items.length) {
+        Alert.alert("Keranjang kosong", "Tambahkan item terlebih dulu.");
+        return;
+      }
+
+      if (!selectedAmount || selectedAmount < totalBayar) {
+        Alert.alert(
+          "Nominal kurang",
+          "Masukkan nominal yang cukup untuk membayar."
+        );
+        return;
+      }
+
+      const [rawUser, rawLoc, rawToken] = await Promise.all([
+        AsyncStorage.getItem("auth_user"),
+        AsyncStorage.getItem("selected_location"),
+        AsyncStorage.getItem("auth_token"),
+      ]);
+
+      const user = rawUser ? JSON.parse(rawUser) : null;
+      const loc = rawLoc ? JSON.parse(rawLoc) : null;
+      const token = rawToken ?? null;
+
+      const appid: string = user?.appid;
+      const location_id: number = loc?.loc_id ?? 3365;
+      const location_code: string = loc?.loc_code ?? "C05";
+      const created_by: number = user?.userid ?? 2018;
+      const today = new Date().toISOString().slice(0, 10);
+
+      const product_list = items.map((it, idx) => {
+        const unit = it.unitBasePrice + it.unitAddonsPrice;
+        return {
+          indx: idx + 1,
+          prod_id: String(it.prodId),
+          prod_name: it.name,
+          prod_price: it.unitBasePrice,
+          prod_disc: "",
+          prod_qty: it.quantity,
+          prod_total: unit * it.quantity,
+          prod_note: it.note?.message ?? "",
+          modifiers: [],
+          is_takeaway: !!it.note?.takeaway,
+          discount_tag: 0,
+          discount_tag_value: 0,
+          package_modifier: [],
+          product_package_content: null,
+        };
+      });
+
+      const payAmount = selectedAmount; // dari input/tombol
+      const changeAmount = Math.max(payAmount - totalBayar, 0); // hitung kembalian
+
+      const payload = {
+        appid,
+        nota: [],
+        location_id,
+        location_code,
+        created_by,
+        description: "",
+        hl_eta_time: "now",
+        qren_merchant_id: "125193375",
+        hl_takeaway: 0,
+        customer_details: {
+          cust_id: 17102593463615356,
+          cust_name: "Guest",
+          cust_phone: "",
+          cust_email: "",
+        },
+        payment_details: {
+          stotal: subtotal,
+          gtotal: totalBayar,
+          rounding_nominal: 0,
+          discount_amount: 0,
+          discount_name: "",
+          tax: 0,
+          tax_id: 0,
+          tax_name: null,
+          tax_percent: null,
+          tax_type: null,
+          tax_setting: null,
+          service,
+          service_id: 262899,
+          service_name: "Service Charger (%)",
+          service_percent: servicePercent,
+          service_type: "%",
+          service_setting: "(subtotal-disc)",
+          is_show_admin_fee: "0",
+          admin_fee_type: "idr",
+          admin_fee: adminFee,
+          admin_fee_percentage: 0,
+          revenue_share_cust: "50.00",
+          pay_amount: payAmount, // dari input
+          change_amount: changeAmount, // hasil hitung
+          payment_date: today,
+          payment_id: 19,
+          payment_method: "cash",
+          void_by: "",
+          void_note: "",
+        },
+        product_list,
+        loc_print_checker: "1",
+        loc_printer_bill_ipaddress: "192.168.103.100",
+        loc_printer_bill_type: "bluetooth",
+        loc_printer_bluetooth_paper_size: 58,
+        device_info: {
+          device: "android",
+          device_android_version: "11",
+          device_mac_address: "-",
+          device_model: "Nokia 5.3",
+          device_name: "HMD Global",
+          device_os_name: "R",
+          devicenewdate: today,
+          email: user?.email ?? "",
+          is_logout: false,
+          key: "anb72794778AHAS2907f44",
+          location_id,
+          version_code: "mp lite 1.0.0",
+        },
+      };
+
+      const resp = await createResource<any>(
+        "transaction/create",
+        payload,
+        token
+      );
+
+      Alert.alert("Sukses", "Transaksi berhasil dibuat.");
+      clearCart();
+      await AsyncStorage.setItem("tx:last_response", JSON.stringify(resp));
+      router.replace({
+        pathname: "/receipt",
+        params: { ts: String(Date.now()) },
+      });
+    } catch (e: any) {
+      console.log("Create transaction error:", e);
+      Alert.alert("Gagal", e?.message ?? "Gagal membuat transaksi.");
+    }
+  };
+
+  // --- UI (ringkas, sama seperti sebelumnya) ---
   return (
     <View style={{ flex: 1, backgroundColor: "#f9fafb" }}>
-      <Header title="Struk Transaksi" showBackButton textColor="text-white" backIconColor="#fff" />
+      <Header
+        title="Struk Transaksi"
+        showBackButton
+        textColor="text-white"
+        backIconColor="#fff"
+      />
 
       <ScrollView contentContainerStyle={{ padding: 16 }}>
-        {/* Ringkasan Belanja */}
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>RINGKASAN BELANJA</Text>
 
-          {/* (Opsional) tampilkan ringkas item */}
-          {items.map((it) => (
-            <View key={it.id} style={{ marginBottom: 6 }}>
-              <Text style={{ fontWeight: "600", color: "#111827" }}>
-                {it.name} × {it.quantity}
-              </Text>
-              <Text style={{ color: "#6b7280", fontSize: 12 }}>
-                {formatCurrency((it.unitBasePrice + it.unitAddonsPrice) * it.quantity)}
-              </Text>
-            </View>
-          ))}
+          {items.map((it) => {
+            const line = (it.unitBasePrice + it.unitAddonsPrice) * it.quantity;
+            return (
+              <View key={it.id} style={{ marginBottom: 6 }}>
+                <Text style={{ fontWeight: "600", color: "#111827" }}>
+                  {it.name} × {it.quantity}
+                </Text>
+                <Text style={{ color: "#6b7280", fontSize: 12 }}>
+                  {formatCurrency(line)}
+                </Text>
+              </View>
+            );
+          })}
 
-          <Row label="Subtotal" value={formatCurrency(subtotal)} />
-          <Row
-            label="Biaya Admin"
-            value={`+ ${formatCurrency(biayaAdmin)}`}
-            valueColor="red"
-          />
-          <Row label="Total Bayar" value={formatCurrency(totalBayar)} bold />
+          <View style={styles.row}>
+            <Text>Subtotal</Text>
+            <Text>{formatCurrency(subtotal)}</Text>
+          </View>
+
+          <View style={styles.row}>
+            <Text>Service (10%)</Text>
+            <Text style={{ color: "red" }}>+ {formatCurrency(service)}</Text>
+          </View>
+
+          <View style={styles.row}>
+            <Text style={styles.bold}>Total Bayar</Text>
+            <Text style={styles.bold}>{formatCurrency(totalBayar)}</Text>
+          </View>
         </View>
 
-        {/* Pilih Metode Pembayaran */}
         <View style={[styles.card, { marginTop: 16 }]}>
           <Text style={styles.sectionTitle}>PILIH METODE PEMBAYARAN</Text>
-
           <View style={styles.inputWrapper}>
             <Ionicons name="card-outline" size={20} color="#6b7280" />
             <TextInput
@@ -114,25 +252,40 @@ const Checkout = () => {
           </View>
 
           <View style={styles.moneyButtons}>
-            {moneyOptions.map((amount, index) => (
-              <MoneyButton
+            {useMemo(() => {
+              const pecahan = [1000, 2000, 5000, 10000, 20000, 50000, 100000];
+              const list: number[] = [totalBayar + 1000];
+              pecahan.forEach((p) => {
+                const kelipatan = Math.ceil(totalBayar / p) * p;
+                if (!list.includes(kelipatan)) list.push(kelipatan);
+              });
+              return list.sort((a, b) => a - b);
+            }, [totalBayar]).map((amount, i) => (
+              <TouchableOpacity
                 key={amount}
-                amount={amount}
-                isActive={selectedAmount === amount}
-                onPress={() => setSelectedAmount(amount)}
-                isFirst={index === 0}
-              />
+                style={[
+                  styles.moneyButton,
+                  selectedAmount === amount && styles.moneyButtonActive,
+                ]}
+                onPress={() => setSelectedAmount(amount)}>
+                <Text
+                  style={[
+                    styles.moneyButtonText,
+                    selectedAmount === amount && styles.moneyButtonTextActive,
+                  ]}>
+                  {i === 0 ? "Uang Pas" : amount.toLocaleString("id-ID")}
+                </Text>
+              </TouchableOpacity>
             ))}
           </View>
         </View>
       </ScrollView>
 
-      {/* Bottom bar pakai nilai dari cart */}
       <BottomBar
         itemCount={itemCount}
         total={totalBayar}
         buttonText="Selesaikan Transaksi"
-        onPress={() => router.push("/receipt")}
+        onPress={onSubmit}
         formatCurrency={formatCurrency}
       />
     </View>
@@ -140,6 +293,12 @@ const Checkout = () => {
 };
 
 const styles = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginVertical: 2,
+  },
+  bold: { fontWeight: "bold" },
   card: {
     backgroundColor: "#fff",
     padding: 16,
@@ -150,7 +309,11 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   sectionTitle: { fontSize: 12, color: "#6b7280", marginBottom: 8 },
-  row: { flexDirection: "row", justifyContent: "space-between", marginVertical: 2 },
+  row: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginVertical: 2,
+  },
   bold: { fontWeight: "bold" },
   inputWrapper: {
     flexDirection: "row",
@@ -162,7 +325,12 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   input: { flex: 1, marginLeft: 8 },
-  moneyButtons: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
+  moneyButtons: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 12,
+  },
   moneyButton: {
     borderWidth: 1,
     borderColor: "#d1d5db",

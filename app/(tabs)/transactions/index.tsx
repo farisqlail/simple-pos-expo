@@ -27,6 +27,7 @@ interface Option {
 }
 const addItem = useCartStore((s) => s.addItem);
 interface Product {
+  productId: string;
   name: string;
   price: string;
   originalPrice?: string;
@@ -187,6 +188,7 @@ const TransactionScreen = () => {
             const toppingOptions = extractToppings(p.data_modifiers);
 
             return {
+              productId: String(p.product_id),
               name: p.product_name || "-",
               price: formatPriceNoRp(p.product_pricenow ?? 0),
               discount: p.discount_tag ?? undefined,
@@ -237,24 +239,16 @@ const TransactionScreen = () => {
   }) => {
     if (!selectedProduct) return;
 
-    // harga dasar dari string "25.000" → 25000
     const base =
       parseInt((selectedProduct.price || "0").replace(/[^\d]/g, "")) || 0;
-
-    // total per unit = total / qty, addons = perUnit - base
     const perUnit = Math.round(mods.total / Math.max(mods.quantity, 1));
     const unitAddons = Math.max(perUnit - base, 0);
 
-    // id unik berdasarkan nama + opsi
-    const id = `${selectedProduct.name}|${mods.size || ""}|${mods.sugar || ""}|${(
-      mods.toppings || []
-    )
-      .slice()
-      .sort()
-      .join(",")}`;
+    const key = `${selectedProduct.productId}|${selectedProduct.name}|${mods.size || ""}|${mods.sugar || ""}|${(mods.toppings || []).sort().join(",")}`;
 
     addItem({
-      id,
+      id: key,
+      prodId: selectedProduct.productId, // ⬅️ penting utk API
       name: selectedProduct.name,
       unitBasePrice: base,
       unitAddonsPrice: unitAddons,
@@ -263,7 +257,7 @@ const TransactionScreen = () => {
         size: mods.size,
         sugar: mods.sugar,
         toppings: mods.toppings,
-        takeaway: true, // contoh
+        takeaway: true,
       },
     });
 
