@@ -16,6 +16,15 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
+      "package": "com.company.n7pos", 
+      "versionCode": 1, 
+      "permissions": [
+        "BLUETOOTH",
+        "BLUETOOTH_ADMIN",
+        "BLUETOOTH_CONNECT",
+        "BLUETOOTH_SCAN", 
+        "ACCESS_FINE_LOCATION" 
+      ],
       "edgeToEdgeEnabled": true
     },
     "web": {

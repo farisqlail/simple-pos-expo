@@ -12,6 +12,7 @@ import {
 import { useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { PrinterService, ReceiptData } from "@/lib/utils/printer";
 
 type TxResponse = any; // bentuk response bisa bervariasi
 
@@ -46,6 +47,10 @@ export default function ReceiptScreen() {
   const [storeLogo, setStoreLogo] = useState(
     "https://via.placeholder.com/40x40.png?text=N7"
   );
+  const [printerOpen, setPrinterOpen] = useState(false);
+  const [paired, setPaired] = useState<{ name: string; address: string }[]>([]);
+  const [activeMac, setActiveMac] = useState<string | null>(null);
+  const [printing, setPrinting] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -79,6 +84,64 @@ export default function ReceiptScreen() {
       };
     }, [])
   );
+
+  useEffect(() => {
+    (async () => {
+      const mac = await PrinterService.getActive();
+      setActiveMac(mac);
+    })();
+  }, []);
+
+  const openPrinterPicker = async () => {
+    try {
+      const list = await PrinterService.getPaired();
+      setPaired(list);
+      setPrinterOpen(true);
+    } catch (e) {
+      console.log("BT list error:", e);
+      setPaired([]);
+      setPrinterOpen(true);
+    }
+  };
+
+  const handleChoosePrinter = async (mac: string) => {
+    await PrinterService.setActive(mac);
+    setActiveMac(mac);
+    setPrinterOpen(false);
+  };
+
+  const handlePrint = async () => {
+    try {
+      if (!activeMac) {
+        // kalau belum pilih printer -> buka picker
+        await openPrinterPicker();
+        return;
+      }
+      setPrinting(true);
+
+      const data: ReceiptData = {
+        storeName,
+        storeAddress,
+        invoice,
+        date,
+        paymentMethod,
+        subtotal,
+        adminFee,
+        service,
+        total,
+        amountReceived,
+        change,
+        items, // hasil mapping di memo kamu
+      };
+
+      await PrinterService.printReceipt(activeMac, data);
+    } catch (e: any) {
+      console.log("Print error:", e);
+      // boleh tampilkan alert/toast
+    } finally {
+      setPrinting(false);
+    }
+  };
 
   // Ambil field aman dengan fallback
   const {
@@ -263,11 +326,16 @@ export default function ReceiptScreen() {
       <View style={styles.bottomBar}>
         <TouchableOpacity
           style={styles.printButton}
-          onPress={() => {
-            /* TODO: implementasi cetak */
-          }}>
+          onPress={handlePrint}
+          disabled={printing}>
           <Ionicons name="print" size={16} color="#DA2424" />
-          <Text style={styles.printText}>Cetak Struk</Text>
+          <Text style={styles.printText}>
+            {printing
+              ? "Mencetak..."
+              : activeMac
+                ? "Cetak Struk"
+                : "Pilih Printer"}
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.newTransactionButton}
@@ -276,6 +344,107 @@ export default function ReceiptScreen() {
           <Text style={styles.newTransactionText}>Transaksi Baru</Text>
         </TouchableOpacity>
       </View>
+
+      {printerOpen && (
+        <View
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            top: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0,0,0,0.35)",
+            justifyContent: "center",
+            alignItems: "center",
+            padding: 16,
+          }}>
+          <View
+            style={{
+              backgroundColor: "#fff",
+              borderRadius: 10,
+              width: "100%",
+              maxWidth: 420,
+            }}>
+            <View
+              style={{
+                padding: 14,
+                borderBottomWidth: StyleSheet.hairlineWidth,
+                borderBottomColor: "#eee",
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}>
+              <Text style={{ fontWeight: "800" }}>Pilih Printer Bluetooth</Text>
+              <TouchableOpacity onPress={() => setPrinterOpen(false)}>
+                <Ionicons name="close" size={20} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 320 }}>
+              {paired.length === 0 ? (
+                <View style={{ padding: 16 }}>
+                  <Text style={{ color: "#6b7280" }}>
+                    Tidak ada perangkat terpasang.
+                  </Text>
+                </View>
+              ) : (
+                paired.map((d) => (
+                  <TouchableOpacity
+                    key={d.address}
+                    onPress={() => handleChoosePrinter(d.address)}
+                    style={{
+                      paddingHorizontal: 16,
+                      paddingVertical: 12,
+                      borderBottomWidth: StyleSheet.hairlineWidth,
+                      borderBottomColor: "#eee",
+                      backgroundColor:
+                        activeMac === d.address ? "#FEE2E2" : "#fff",
+                    }}>
+                    <Text style={{ fontWeight: "700" }}>
+                      {d.name || "(Tanpa nama)"}
+                    </Text>
+                    <Text style={{ color: "#6b7280", fontSize: 12 }}>
+                      {d.address}
+                    </Text>
+                    {activeMac === d.address ? (
+                      <Text
+                        style={{
+                          color: "#b91c1c",
+                          fontSize: 12,
+                          marginTop: 4,
+                        }}>
+                        Aktif
+                      </Text>
+                    ) : null}
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
+
+            <View
+              style={{
+                padding: 12,
+                flexDirection: "row",
+                justifyContent: "flex-end",
+                gap: 10,
+              }}>
+              <TouchableOpacity
+                onPress={() => setPrinterOpen(false)}
+                style={{
+                  paddingHorizontal: 14,
+                  paddingVertical: 10,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: "#b91c1c",
+                }}>
+                <Text style={{ color: "#b91c1c", fontWeight: "700" }}>
+                  Tutup
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
