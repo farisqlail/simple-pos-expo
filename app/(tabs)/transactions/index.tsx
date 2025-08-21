@@ -25,7 +25,7 @@ interface Option {
   name: string;
   price: number;
 }
-const addItem = useCartStore((s) => s.addItem);
+
 interface Product {
   productId: string;
   name: string;
@@ -44,6 +44,7 @@ interface CachedProducts {
   cachedAt: number;
   data: CategoryNode[];
 }
+
 interface CategoryNode {
   pcategory_id: number;
   pcategory_name: string;
@@ -56,7 +57,6 @@ interface ModNode {
   mdf_name: string;
   mdf_price: number | null;
   is_active?: "0" | "1";
-  // ...kolom lain diabaikan
 }
 
 interface ProductNode {
@@ -68,12 +68,7 @@ interface ProductNode {
   stockonhand?: number;
   stock?: number;
   discount_tag?: string | null;
-  data_modifiers?: ModNode[]; // <— PENTING: ambil dari API
-}
-
-interface Modification {
-  name: string;
-  value: string | number;
+  data_modifiers?: ModNode[]; // dari API
 }
 
 const STORAGE_KEYS = {
@@ -88,6 +83,7 @@ function formatPriceNoRp(n: number | string) {
     num as number
   );
 }
+
 const normalizeStr = (s: string) =>
   s
     .normalize("NFD")
@@ -121,7 +117,11 @@ const TransactionScreen = () => {
   const [showModification, setShowModification] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const router = useRouter();
+
+  // ✅ Hooks store dipanggil di dalam komponen (sesuai rules-of-hooks)
+  const addItem = useCartStore((s) => s.addItem);
   const clearCart = useCartStore((s) => s.clearCart);
+
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<Product[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -195,7 +195,6 @@ const TransactionScreen = () => {
               image: imgProp || productImg,
               initials: (p.product_name || "-").slice(0, 2).toUpperCase(),
               outOfStock,
-              // kalau ada group size/sugar tertentu, bisa mapping di sini juga
               sizeOptions: [],
               sugarOptions: [],
               toppingOptions,
@@ -248,7 +247,7 @@ const TransactionScreen = () => {
 
     addItem({
       id: key,
-      prodId: selectedProduct.productId, // ⬅️ penting utk API
+      prodId: selectedProduct.productId, // utk API
       name: selectedProduct.name,
       unitBasePrice: base,
       unitAddonsPrice: unitAddons,
@@ -301,11 +300,10 @@ const TransactionScreen = () => {
           ) : (
             <View
               className="mt-4"
-              style={{ flexDirection: "row", flexWrap: "wrap", gap }}>
+              style={{ flexDirection: "row", flexWrap: "wrap", gap }}
+            >
               {filteredItems.map((item, index) => (
-                <View
-                  key={`${item.name}-${index}`}
-                  style={{ width: itemWidth }}>
+                <View key={`${item.name}-${index}`} style={{ width: itemWidth }}>
                   <ProductCard
                     name={item.name}
                     price={item.price}
@@ -331,7 +329,7 @@ const TransactionScreen = () => {
         productImage={selectedProduct?.image || productImg}
         sizeOptions={selectedProduct?.sizeOptions || []}
         sugarOptions={selectedProduct?.sugarOptions || []}
-        toppingOptions={selectedProduct?.toppingOptions || []} // <— sudah berasal dari data_modifiers
+        toppingOptions={selectedProduct?.toppingOptions || []}
         isVisible={showModification}
         onClose={() => setShowModification(false)}
         onSave={handleSaveModification}

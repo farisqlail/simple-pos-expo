@@ -1,5 +1,5 @@
 import React from "react";
-import { Modal, View, Text, ActivityIndicator, TouchableOpacity, Platform } from "react-native";
+import { Modal, View, Text, ActivityIndicator, TouchableOpacity } from "react-native";
 
 export type StepState = "pending" | "loading" | "done" | "error";
 
@@ -31,7 +31,13 @@ export default function ProgressModal({
   return (
     <Modal transparent visible={visible} onRequestClose={onRequestClose} animationType="fade">
       {/* Backdrop */}
-      <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.35)", justifyContent: "center", padding: 24 }}>
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: "rgba(0,0,0,0.35)",
+          justifyContent: "center",
+          padding: 24,
+        }}>
         {/* Card */}
         <View
           style={{
@@ -43,13 +49,25 @@ export default function ProgressModal({
             shadowOpacity: 0.15,
             shadowRadius: 16,
             elevation: 6,
-          }}
-        >
+          }}>
           <Text style={{ fontSize: 16, fontWeight: "600", color: "#111827" }}>{title}</Text>
 
           {/* Progress bar */}
-          <View style={{ height: 8, backgroundColor: "#F3F4F6", borderRadius: 999, marginTop: 12, overflow: "hidden" }}>
-            <View style={{ width: `${percent}%`, height: "100%", backgroundColor: "#EF4444" }} />
+          <View
+            style={{
+              height: 8,
+              backgroundColor: "#F3F4F6",
+              borderRadius: 999,
+              marginTop: 12,
+              overflow: "hidden",
+            }}>
+            <View
+              style={{
+                width: `${percent}%`,
+                height: "100%",
+                backgroundColor: "#EF4444",
+              }}
+            />
           </View>
           <Text style={{ marginTop: 6, fontSize: 12, color: "#6B7280" }}>{percent}%</Text>
 
@@ -70,7 +88,9 @@ export default function ProgressModal({
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: "#111827" }}>{s.label}</Text>
-                  {s.error ? <Text style={{ color: "#EF4444", fontSize: 12 }}>{s.error}</Text> : null}
+                  {s.error ? (
+                    <Text style={{ color: "#EF4444", fontSize: 12 }}>{s.error}</Text>
+                  ) : null}
                 </View>
               </View>
             ))}
@@ -86,8 +106,7 @@ export default function ProgressModal({
                 paddingVertical: 8,
                 backgroundColor: "#F3F4F6",
                 borderRadius: 10,
-              }}
-            >
+              }}>
               <Text style={{ color: "#111827" }}>Tutup</Text>
             </TouchableOpacity>
           ) : null}

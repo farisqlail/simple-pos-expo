@@ -1,3 +1,4 @@
+// app/checkout/index.tsx
 import React, { useMemo, useState } from "react";
 import { useRouter } from "expo-router";
 import {
@@ -24,8 +25,7 @@ const Checkout = () => {
   const clearCart = useCartStore((s) => s.clear);
 
   const { subtotal, itemCount } = useMemo(() => {
-    let sub = 0,
-      count = 0;
+    let sub = 0, count = 0;
     for (const it of items) {
       const unit = it.unitBasePrice + it.unitAddonsPrice;
       sub += unit * it.quantity;
@@ -34,17 +34,17 @@ const Checkout = () => {
     return { subtotal: sub, itemCount: count };
   }, [items]);
 
-  const servicePercent = 10; // contoh mengikuti payload
+  const servicePercent = 10;
   const service = Math.round((subtotal * servicePercent) / 100);
-  const adminFee = 0; // contoh
-  const biayaAdmin = adminFee;
+  const adminFee = 0;
   const totalBayar = subtotal + service + adminFee;
 
   const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
 
+  // Hitung opsi uang sekali (depend on totalBayar)
   const moneyOptions = useMemo(() => {
     const pecahan = [1000, 2000, 5000, 10000, 20000, 50000, 100000];
-    const list: number[] = [totalBayar + 1000];
+    const list: number[] = [totalBayar + 1000]; // "uang pas" default
     pecahan.forEach((p) => {
       const kelipatan = Math.ceil(totalBayar / p) * p;
       if (!list.includes(kelipatan)) list.push(kelipatan);
@@ -52,7 +52,6 @@ const Checkout = () => {
     return list.sort((a, b) => a - b);
   }, [totalBayar]);
 
-  // === Submit transaksi
   const onSubmit = async () => {
     try {
       if (!items.length) {
@@ -61,10 +60,7 @@ const Checkout = () => {
       }
 
       if (!selectedAmount || selectedAmount < totalBayar) {
-        Alert.alert(
-          "Nominal kurang",
-          "Masukkan nominal yang cukup untuk membayar."
-        );
+        Alert.alert("Nominal kurang", "Masukkan nominal yang cukup untuk membayar.");
         return;
       }
 
@@ -76,7 +72,7 @@ const Checkout = () => {
 
       const user = rawUser ? JSON.parse(rawUser) : null;
       const loc = rawLoc ? JSON.parse(rawLoc) : null;
-      const token = rawToken ?? null;
+      const token = rawToken ?? "";
 
       const appid: string = user?.appid;
       const location_id: number = loc?.loc_id ?? 3365;
@@ -104,8 +100,8 @@ const Checkout = () => {
         };
       });
 
-      const payAmount = selectedAmount; // dari input/tombol
-      const changeAmount = Math.max(payAmount - totalBayar, 0); // hitung kembalian
+      const payAmount = selectedAmount;
+      const changeAmount = Math.max(payAmount - totalBayar, 0);
 
       const payload = {
         appid,
@@ -146,8 +142,8 @@ const Checkout = () => {
           admin_fee: adminFee,
           admin_fee_percentage: 0,
           revenue_share_cust: "50.00",
-          pay_amount: payAmount, // dari input
-          change_amount: changeAmount, // hasil hitung
+          pay_amount: payAmount,
+          change_amount: changeAmount,
           payment_date: today,
           payment_id: 19,
           payment_method: "cash",
@@ -175,34 +171,21 @@ const Checkout = () => {
         },
       };
 
-      const resp = await createResource<any>(
-        "transaction/create",
-        payload,
-        token
-      );
+      const resp = await createResource<any>("transaction/create", payload, token);
 
       Alert.alert("Sukses", "Transaksi berhasil dibuat.");
       clearCart();
       await AsyncStorage.setItem("tx:last_response", JSON.stringify(resp));
-      router.replace({
-        pathname: "/receipt",
-        params: { ts: String(Date.now()) },
-      });
+      router.replace({ pathname: "/receipt", params: { ts: String(Date.now()) } });
     } catch (e: any) {
       console.log("Create transaction error:", e);
       Alert.alert("Gagal", e?.message ?? "Gagal membuat transaksi.");
     }
   };
 
-  // --- UI (ringkas, sama seperti sebelumnya) ---
   return (
     <View style={{ flex: 1, backgroundColor: "#f9fafb" }}>
-      <Header
-        title="Struk Transaksi"
-        showBackButton
-        textColor="text-white"
-        backIconColor="#fff"
-      />
+      <Header title="Struk Transaksi" showBackButton textColor="text-white" backIconColor="#fff" />
 
       <ScrollView contentContainerStyle={{ padding: 16 }}>
         <View style={styles.card}>
@@ -247,32 +230,29 @@ const Checkout = () => {
               keyboardType="numeric"
               placeholder="Masukkan nominal"
               value={selectedAmount ? String(selectedAmount) : ""}
-              onChangeText={(val) => setSelectedAmount(Number(val) || 0)}
+              onChangeText={(val) => {
+                const digits = val.replace(/[^\d]/g, "");
+                setSelectedAmount(digits ? Number(digits) : null);
+              }}
             />
           </View>
 
           <View style={styles.moneyButtons}>
-            {useMemo(() => {
-              const pecahan = [1000, 2000, 5000, 10000, 20000, 50000, 100000];
-              const list: number[] = [totalBayar + 1000];
-              pecahan.forEach((p) => {
-                const kelipatan = Math.ceil(totalBayar / p) * p;
-                if (!list.includes(kelipatan)) list.push(kelipatan);
-              });
-              return list.sort((a, b) => a - b);
-            }, [totalBayar]).map((amount, i) => (
+            {moneyOptions.map((amount, i) => (
               <TouchableOpacity
                 key={amount}
                 style={[
                   styles.moneyButton,
                   selectedAmount === amount && styles.moneyButtonActive,
                 ]}
-                onPress={() => setSelectedAmount(amount)}>
+                onPress={() => setSelectedAmount(amount)}
+              >
                 <Text
                   style={[
                     styles.moneyButtonText,
                     selectedAmount === amount && styles.moneyButtonTextActive,
-                  ]}>
+                  ]}
+                >
                   {i === 0 ? "Uang Pas" : amount.toLocaleString("id-ID")}
                 </Text>
               </TouchableOpacity>
@@ -293,12 +273,6 @@ const Checkout = () => {
 };
 
 const styles = StyleSheet.create({
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginVertical: 2,
-  },
-  bold: { fontWeight: "bold" },
   card: {
     backgroundColor: "#fff",
     padding: 16,

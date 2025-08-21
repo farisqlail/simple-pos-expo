@@ -14,7 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { PrinterService, ReceiptData } from "@/lib/utils/printer";
 
-type TxResponse = any; // bentuk response bisa bervariasi
+type TxResponse = any;
 
 const formatCurrency = (num: number = 0) =>
   "Rp " + (Number(num) || 0).toLocaleString("id-ID");
@@ -70,7 +70,6 @@ export default function ReceiptScreen() {
           }
           if (!active) return;
           setResp(raw ? JSON.parse(raw) : null);
-          // Debug optional:
           console.log("[Receipt] tx:last_response:", raw);
         } catch (e) {
           console.log("Load receipt error:", e);
@@ -113,7 +112,6 @@ export default function ReceiptScreen() {
   const handlePrint = async () => {
     try {
       if (!activeMac) {
-        // kalau belum pilih printer -> buka picker
         await openPrinterPicker();
         return;
       }
@@ -131,19 +129,17 @@ export default function ReceiptScreen() {
         total,
         amountReceived,
         change,
-        items, // hasil mapping di memo kamu
+        items,
       };
 
       await PrinterService.printReceipt(activeMac, data);
     } catch (e: any) {
       console.log("Print error:", e);
-      // boleh tampilkan alert/toast
     } finally {
       setPrinting(false);
     }
   };
 
-  // Ambil field aman dengan fallback
   const {
     invoice,
     date,
@@ -159,43 +155,34 @@ export default function ReceiptScreen() {
     const r = resp ?? {};
     const data = r?.data ?? {};
 
-    // Nomor nota & tanggal
     const invoice = data?.no_nota || "#INV-XXXX";
     const date =
       data?.tranbayar?.tglsetor ||
       data?.created_at ||
       new Date().toLocaleString("id-ID");
 
-    // Items dari data.details
     const rawDetails = Array.isArray(data?.details) ? data.details : [];
     const items = rawDetails.map((d: any) => ({
       name: d?.nmbrg || "-",
-      // harga baris; di respons ada d.totals = total line, d.hgsatmkt = harga satuan
       price: Number(d?.totals ?? d?.hgsatmkt ?? 0),
       qty: Number(d?.qty ?? 1),
-      // jika kamu punya modifiers/catatan, bisa disusun di sini
       details: undefined,
     }));
 
-    // Subtotal = jumlahkan total per baris dari details
     const subtotal = rawDetails.reduce(
       (acc: number, d: any) => acc + Number(d?.totals ?? 0),
       0
     );
 
-    // Total dari field gtotal; service = selisih total - subtotal (jika ada)
     const total = Number(data?.gtotal ?? subtotal);
     const service = Math.max(total - subtotal, 0);
-    const adminFee = 0; // responsmu tidak ada admin fee → 0
+    const adminFee = 0;
 
-    // Pembayaran
     const bayar = data?.tranbayar ?? {};
-    const amountReceived = Number(bayar?.jmlBayar ?? 0); // Uang diterima langsung dari API
+    const amountReceived = Number(bayar?.jmlBayar ?? 0);
     const change = Number(bayar?.jmlKembali ?? 0);
 
-    // Metode pembayaran
     const paymentMethodRaw = bayar?.payment_method || bayar?.caraBayar || "—";
-    // Normalisasi: kalau "Cash" atau id 19 -> tampilkan "Tunai"
     const paymentMethod =
       String(paymentMethodRaw).toLowerCase() === "cash" ||
       String(paymentMethodRaw) === "19"
@@ -217,7 +204,7 @@ export default function ReceiptScreen() {
       change,
       items,
     };
-  }, [resp]);
+  }, [resp, storeName, storeAddress, storeLogo]); // ✅ tambahkan dependencies
 
   if (loading) {
     return (
@@ -252,15 +239,12 @@ export default function ReceiptScreen() {
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Status */}
         <View style={styles.successIcon}>
           <Ionicons name="checkmark-circle" size={70} color="#4CAF50" />
         </View>
         <Text style={styles.successText}>Transaksi Berhasil</Text>
 
-        {/* Card Info */}
         <View style={styles.card}>
-          {/* Store Info */}
           <View style={styles.storeRow}>
             <Image source={{ uri: storeLogo }} style={styles.storeLogo} />
             <View>
@@ -276,36 +260,32 @@ export default function ReceiptScreen() {
 
           <RowBetween label="Metode Pembayaran" value={paymentMethod} bold />
           <RowBetween label="Subtotal" value={formatCurrency(subtotal)} />
-          {/* tampilkan jika ada admin fee */}
-          {adminFee > 0 ? (
+          {adminFee > 0 && (
             <RowBetween
               label="Biaya Admin"
               value={`+ ${formatCurrency(adminFee)}`}
               valueColor="red"
             />
-          ) : null}
-          {/* tampilkan jika ada service */}
-          {service > 0 ? (
+          )}
+          {service > 0 && (
             <RowBetween
               label="Service"
               value={`+ ${formatCurrency(service)}`}
               valueColor="red"
             />
-          ) : null}
+          )}
           <RowBetween label="Total Bayar" value={formatCurrency(total)} bold />
           <RowBetween
             label="Uang Diterima"
             value={formatCurrency(amountReceived)}
           />
 
-          {/* Change */}
           <View style={styles.changeBox}>
             <Text style={styles.changeLabel}>Kembalian</Text>
             <Text style={styles.changeValue}>{formatCurrency(change)}</Text>
           </View>
         </View>
 
-        {/* Detail Pembelian */}
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>DETAIL PEMBELIAN</Text>
           {items.map((item: any, index: number) => (
@@ -314,15 +294,14 @@ export default function ReceiptScreen() {
                 label={`${item.qty}x ${item.name}`}
                 value={formatCurrency(item.price)}
               />
-              {item.details ? (
+              {item.details && (
                 <Text style={styles.itemDetails}>{item.details}</Text>
-              ) : null}
+              )}
             </View>
           ))}
         </View>
       </ScrollView>
 
-      {/* Bottom Buttons */}
       <View style={styles.bottomBar}>
         <TouchableOpacity
           style={styles.printButton}
@@ -333,8 +312,8 @@ export default function ReceiptScreen() {
             {printing
               ? "Mencetak..."
               : activeMac
-                ? "Cetak Struk"
-                : "Pilih Printer"}
+              ? "Cetak Struk"
+              : "Pilih Printer"}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -406,7 +385,7 @@ export default function ReceiptScreen() {
                     <Text style={{ color: "#6b7280", fontSize: 12 }}>
                       {d.address}
                     </Text>
-                    {activeMac === d.address ? (
+                    {activeMac === d.address && (
                       <Text
                         style={{
                           color: "#b91c1c",
@@ -415,7 +394,7 @@ export default function ReceiptScreen() {
                         }}>
                         Aktif
                       </Text>
-                    ) : null}
+                    )}
                   </TouchableOpacity>
                 ))
               )}

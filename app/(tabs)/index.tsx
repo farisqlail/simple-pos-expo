@@ -29,6 +29,8 @@ import ProgressModal from "@/components/ui/ProgressModal";
 export default function Index() {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [lastSynced, setLastSynced] = useState<number | null>(null);
+
   const LOGIN_ROUTE = "/(auth)";
 
   const { auth, location, ready } = useStoredAuth();
@@ -36,8 +38,8 @@ export default function Index() {
   const appid = auth.user?.appid;
   const locId = location?.loc_id ?? 3365;
   const locationName = location?.loc_name ?? "";
+
   const { visible, steps, start, hide } = useBootstrapCatalog();
-  const [lastSynced, setLastSynced] = useState<number | null>(null);
 
   const canRun =
     ready && !!auth.user?.appid && !!auth.token && !!(location?.loc_id ?? null);
@@ -57,8 +59,8 @@ export default function Index() {
         token: auth.token!,
       });
       setLastSynced(Date.now());
-    } catch (e) {
-      // error sudah ditampilkan per-step dalam modal
+    } catch {
+      // Error sudah ditampilkan per-step dalam modal
     }
   };
 
@@ -71,8 +73,8 @@ export default function Index() {
         STORAGE_KEYS.SELECTED_LOCATION,
       ]);
       router.replace(LOGIN_ROUTE);
-    } catch (e) {
-      console.log("Logout error:", e);
+    } catch (err) {
+      console.log("Logout error:", err);
     }
   };
 
@@ -90,17 +92,25 @@ export default function Index() {
             paddingTop: 20,
             position: "relative",
             paddingBottom: 48,
-          }}>
+          }}
+        >
           <View className="px-4 py-3 flex-row items-center justify-between">
             <Image
               source={require("@/assets/images/logo.png")}
               style={{ width: 150, height: 90 }}
               resizeMode="contain"
+              accessibilityIgnoresInvertColors
+              accessible
+              accessibilityRole="image"
+              accessibilityLabel="Logo"
             />
             <TouchableOpacity
               className="p-2 bg-red-500/95 rounded-xl"
               onPress={() => setMenuOpen(true)}
-              activeOpacity={0.85}>
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Buka menu"
+            >
               <MenuIcon width={20} height={20} color="white" />
             </TouchableOpacity>
           </View>
@@ -119,12 +129,21 @@ export default function Index() {
         <ScrollView
           className="bg-[#F3F4F6]"
           contentContainerStyle={{ paddingBottom: 28 }}
-          showsVerticalScrollIndicator={false}>
+          showsVerticalScrollIndicator={false}
+        >
           {/* Ringkasan Hari Ini (dummy) */}
           <View className="px-4 mt-10">
-            <Text className="text-[16px] font-semibold text-gray-900 mb-3">
-              Ringkasan Hari Ini
-            </Text>
+            <View className="flex-row items-center justify-between mb-1">
+              <Text className="text-[16px] font-semibold text-gray-900">
+                Ringkasan Hari Ini
+              </Text>
+              {lastSynced ? (
+                <Text className="text-[11px] text-gray-500">
+                  Terakhir sinkron: {new Date(lastSynced).toLocaleString()}
+                </Text>
+              ) : null}
+            </View>
+
             <View className="flex-row">
               <View
                 className="flex-1 bg-white rounded-xl px-4 py-3 mr-3 justify-center"
@@ -135,7 +154,8 @@ export default function Index() {
                   shadowOpacity: 0.05,
                   shadowRadius: 8,
                   elevation: 2,
-                }}>
+                }}
+              >
                 <Text className="text-gray-500 text-[12px] mb-1">
                   Total Penjualan
                 </Text>
@@ -152,7 +172,8 @@ export default function Index() {
                   shadowOpacity: 0.05,
                   shadowRadius: 8,
                   elevation: 2,
-                }}>
+                }}
+              >
                 <Text className="text-gray-500 text-[12px] mb-1">
                   Total Transaksi
                 </Text>
@@ -181,10 +202,13 @@ export default function Index() {
         transparent
         visible={menuOpen}
         onRequestClose={() => setMenuOpen(false)}
-        animationType="fade">
+        animationType="fade"
+      >
         <Pressable
           onPress={() => setMenuOpen(false)}
           style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+          accessibilityRole="button"
+          accessibilityLabel="Tutup menu"
         />
         <View
           style={{
@@ -200,17 +224,31 @@ export default function Index() {
             shadowOpacity: 0.12,
             shadowRadius: 12,
             elevation: 12,
-          }}>
+          }}
+        >
           <TouchableOpacity
             className="px-4 py-3"
             onPress={onSync}
-            disabled={!canRun}>
-            <Text style={{ color: "black", fontWeight: "600" }}>Sync Data</Text>
+            disabled={!canRun}
+            accessibilityRole="button"
+            accessibilityLabel="Sinkronkan data"
+          >
+            <Text
+              style={{
+                color: canRun ? "black" : "#9CA3AF",
+                fontWeight: "600",
+              }}
+            >
+              Sync Data
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={onLogout}
             className="px-4 py-3"
-            activeOpacity={0.85}>
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Keluar akun"
+          >
             <Text className="text-red-600 font-medium">Logout</Text>
           </TouchableOpacity>
         </View>

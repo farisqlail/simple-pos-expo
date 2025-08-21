@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useRef } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -19,8 +19,6 @@ const QuantitySelector: React.FC<QuantitySelectorProps> = ({
   step = 1,
   size = "medium",
 }) => {
-  const [isEditing, setIsEditing] = useState(false);
-
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const intervalTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -31,12 +29,6 @@ const QuantitySelector: React.FC<QuantitySelectorProps> = ({
   };
 
   const config = sizeConfig[size];
-
-  useEffect(() => {
-    if (!isEditing) {
-      // bisa dipakai kalau ada input edit manual
-    }
-  }, [value, isEditing]);
 
   const handleDecrease = () => {
     const newValue = Math.max(min, value - step);
@@ -85,7 +77,7 @@ const QuantitySelector: React.FC<QuantitySelectorProps> = ({
             backgroundColor: isMinValue ? "#E0E0E0" : "#FEE2E2",
             width: config.buttonSize,
             height: config.buttonSize,
-            borderRadius: 10
+            borderRadius: 10,
           },
         ]}
         activeOpacity={0.7}>
@@ -115,7 +107,7 @@ const QuantitySelector: React.FC<QuantitySelectorProps> = ({
             backgroundColor: isMaxValue ? "#E5E7EB" : "#DC2626",
             width: config.buttonSize,
             height: config.buttonSize,
-            borderRadius: 10
+            borderRadius: 10,
           },
         ]}
         activeOpacity={0.7}>
