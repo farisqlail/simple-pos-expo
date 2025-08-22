@@ -1,3 +1,4 @@
+// components/ui/FloatingCartSummary.tsx
 import React, { useMemo, useState } from "react";
 import {
   View,
@@ -7,7 +8,6 @@ import {
   Modal,
   ScrollView,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { useCartStore, CartItem } from "@/lib/store/useCartStore";
 
 const RED = "#B81D1D";
@@ -126,9 +126,9 @@ const FloatingCartSummary: React.FC<Props> = ({
 }) => {
   const [open, setOpen] = useState(false);
   const items = useCartStore((s) => s.items);
-  const incItem = useCartStore((s) => s.incItem);
-  const decItem = useCartStore((s) => s.decItem);
-  const removeItem = useCartStore((s) => s.removeItem);
+  const incItem = useCartStore((s) => s.inc);
+  const decItem = useCartStore((s) => s.dec);
+  const removeItem = useCartStore((s) => s.remove);
 
   const { itemCount, subtotal } = useMemo(() => {
     let count = 0;
@@ -157,8 +157,7 @@ const FloatingCartSummary: React.FC<Props> = ({
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.barPay}
-            onPress={() => (itemCount > 0 ? setOpen(true) : null)}
-          >
+            onPress={() => (itemCount > 0 ? setOpen(true) : null)}>
             <Text style={styles.barPayText}>Bayar</Text>
           </TouchableOpacity>
         </View>
@@ -169,22 +168,48 @@ const FloatingCartSummary: React.FC<Props> = ({
         visible={open}
         animationType="slide"
         transparent
-        onRequestClose={() => setOpen(false)}
-      >
+        onRequestClose={() => setOpen(false)}>
         <View style={styles.overlay}>
           <View style={styles.sheet}>
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Daftar Varian Item</Text>
-              <TouchableOpacity onPress={() => setOpen(false)}>
-                <Ionicons name="close" size={22} color="#111827" />
-              </TouchableOpacity>
+            {/* Cart Items Summary */}
+            <View style={styles.cartItemsSummary}>
+              <ScrollView
+                style={styles.summaryScrollView}
+                showsVerticalScrollIndicator={false}>
+                {items.map((item) => (
+                  <View key={item.id} style={styles.summaryItem}>
+                    <View style={styles.summaryItemLeft}>
+                      <Text style={styles.summaryItemName} numberOfLines={1}>
+                        {item.name}
+                      </Text>
+                      <Text style={styles.summaryItemPrice}>
+                        {R(item.unitBasePrice + item.unitAddonsPrice)}
+                      </Text>
+                    </View>
+                    <View style={styles.summaryItemActions}>
+                      <TouchableOpacity
+                        style={styles.summaryQtyBtn}
+                        onPress={() => decItem(item.id)}>
+                        <Text style={styles.summaryQtyText}>−</Text>
+                      </TouchableOpacity>
+                      <Text style={styles.summaryQtyValue}>
+                        {item.quantity}
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.summaryQtyBtn}
+                        onPress={() => incItem(item.id)}>
+                        <Text style={styles.summaryQtyText}>+</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
             </View>
 
             <ScrollView
               style={{ flex: 1 }}
               contentContainerStyle={{ padding: 14, paddingBottom: 24 }}
-              showsVerticalScrollIndicator={false}
-            >
+              showsVerticalScrollIndicator={false}>
               {items.length === 0 ? (
                 <View style={{ padding: 16 }}>
                   <Text style={{ color: "#6b7280" }}>
@@ -207,15 +232,6 @@ const FloatingCartSummary: React.FC<Props> = ({
 
             {/* Footer */}
             <View style={styles.footer}>
-              <TouchableOpacity
-                style={styles.newVariantBtn}
-                onPress={() => onAddVariant?.()}
-                activeOpacity={0.9}
-              >
-                <Ionicons name="add-circle" size={18} color="#fff" />
-                <Text style={styles.newVariantText}>Buat Varian Baru</Text>
-              </TouchableOpacity>
-
               <View style={styles.totalRow}>
                 <Text style={{ color: "#374151" }}>Subtotal</Text>
                 <Text style={{ fontWeight: "700" }}>{R(subtotal)}</Text>
@@ -239,18 +255,20 @@ const FloatingCartSummary: React.FC<Props> = ({
                   onPress={() => {
                     setOpen(false);
                     onCancel();
-                  }}
-                >
-                  <Text style={{ color: RED, fontWeight: "700" }}>Batalkan</Text>
+                  }}>
+                  <Text style={{ color: RED, fontWeight: "700" }}>
+                    Batalkan
+                  </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.footerPay}
                   onPress={() => {
                     setOpen(false);
                     onPay();
-                  }}
-                >
-                  <Text style={{ color: "#fff", fontWeight: "800" }}>Bayar</Text>
+                  }}>
+                  <Text style={{ color: "#fff", fontWeight: "800" }}>
+                    Bayar
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -297,7 +315,11 @@ const styles = StyleSheet.create({
   },
   barPayText: { color: RED, fontWeight: "800" },
 
-  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.35)", justifyContent: "flex-end" },
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "flex-end",
+  },
   sheet: {
     backgroundColor: "#fff",
     maxHeight: "88%",
@@ -305,6 +327,53 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 16,
     overflow: "hidden",
   },
+
+  cartItemsSummary: {
+    backgroundColor: "#fff",
+    maxHeight: 200,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#eee",
+  },
+  summaryScrollView: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  summaryItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#f3f4f6",
+  },
+  summaryItemLeft: { flex: 1, marginRight: 12 },
+  summaryItemName: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#111827",
+    marginBottom: 2,
+  },
+  summaryItemPrice: { fontSize: 12, color: "#6b7280", fontWeight: "500" },
+  summaryItemActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  summaryQtyBtn: {
+    backgroundColor: "#FEE2E2",
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    minWidth: 28,
+    alignItems: "center",
+  },
+  summaryQtyText: { color: RED, fontWeight: "700", fontSize: 12 },
+  summaryQtyValue: {
+    minWidth: 20,
+    textAlign: "center",
+    fontWeight: "600",
+    color: "#111827",
+    fontSize: 14,
+  },
+
   sheetHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -329,9 +398,24 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 1,
   },
-  cardHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  cardTitle: { fontWeight: "700", fontSize: 14, color: "#111827", flex: 1, marginRight: 8 },
-  badge: { backgroundColor: "#FEE2E2", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
+  cardHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  cardTitle: {
+    fontWeight: "700",
+    fontSize: 14,
+    color: "#111827",
+    flex: 1,
+    marginRight: 8,
+  },
+  badge: {
+    backgroundColor: "#FEE2E2",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
   badgeText: { color: RED, fontSize: 11, fontWeight: "700" },
   cardPrice: { marginTop: 2, color: "#374151", fontWeight: "700" },
   detailRow: { flexDirection: "row", marginTop: 8, flexWrap: "wrap" },
@@ -359,21 +443,23 @@ const styles = StyleSheet.create({
     borderColor: "#FECACA",
   },
   qtyBtnText: { color: RED, fontWeight: "900", fontSize: 14 },
-  qtyValue: { minWidth: 20, textAlign: "center", fontWeight: "700", color: "#111827" },
-
-  footer: { padding: 16, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#eee" },
-  newVariantBtn: {
-    flexDirection: "row",
-    gap: 6,
-    alignItems: "center",
-    backgroundColor: RED,
-    borderRadius: 10,
-    paddingVertical: 10,
-    justifyContent: "center",
-    marginBottom: 10,
+  qtyValue: {
+    minWidth: 20,
+    textAlign: "center",
+    fontWeight: "700",
+    color: "#111827",
   },
-  newVariantText: { color: "#fff", fontWeight: "800" },
-  totalRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 6 },
+
+  footer: {
+    padding: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#eee",
+  },
+  totalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 6,
+  },
   footerCancel: {
     flex: 1,
     paddingVertical: 10,

@@ -221,7 +221,6 @@ const TransactionScreen = () => {
         setDisplayedItems(initialBatch);
         setCurrentBatchIndex(1);
         setHasMoreData(flatProductNodes.length > INITIAL_LOAD_SIZE);
-
       } catch (e: any) {
         console.log("Load local products error:", e);
         setError(e?.message ?? "Gagal memuat produk lokal.");
@@ -240,18 +239,18 @@ const TransactionScreen = () => {
     setLoadingMore(true);
 
     // Simulasi delay untuk UX yang lebih smooth
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     const startIndex = currentBatchIndex * BATCH_SIZE;
     const endIndex = startIndex + BATCH_SIZE;
-    
+
     const nextBatch = allProductsData
       .slice(startIndex, endIndex)
       .map(convertProductNodeToProduct);
 
     if (nextBatch.length > 0) {
-      setDisplayedItems(prev => [...prev, ...nextBatch]);
-      setCurrentBatchIndex(prev => prev + 1);
+      setDisplayedItems((prev) => [...prev, ...nextBatch]);
+      setCurrentBatchIndex((prev) => prev + 1);
     }
 
     setHasMoreData(endIndex < allProductsData.length);
@@ -320,25 +319,28 @@ const TransactionScreen = () => {
   };
 
   // Handle scroll untuk infinite scroll
-  const handleScroll = useCallback((event: any) => {
-    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
-    const paddingToBottom = 200; // Trigger load more saat 200px dari bottom
-    
-    if (
-      layoutMeasurement.height + contentOffset.y >=
-      contentSize.height - paddingToBottom
-    ) {
-      loadMoreData();
-    }
-  }, [loadMoreData]);
+  const handleScroll = useCallback(
+    (event: any) => {
+      const { layoutMeasurement, contentOffset, contentSize } =
+        event.nativeEvent;
+      const paddingToBottom = 200; // Trigger load more saat 200px dari bottom
+
+      if (
+        layoutMeasurement.height + contentOffset.y >=
+        contentSize.height - paddingToBottom
+      ) {
+        loadMoreData();
+      }
+    },
+    [loadMoreData]
+  );
 
   return (
     <SafeAreaProvider>
-      <ScrollView 
+      <ScrollView
         className="bg-gray-100 flex-1"
         onScroll={handleScroll}
-        scrollEventThrottle={400}
-      >
+        scrollEventThrottle={400}>
         <Header title="Transaksi Baru" showBackButton={false} />
 
         <View className="p-4">
@@ -368,7 +370,7 @@ const TransactionScreen = () => {
             <View style={{ paddingVertical: 24, alignItems: "center" }}>
               <Ionicons name="search-outline" size={48} color="#9ca3af" />
               <Text style={{ color: "#6b7280", marginTop: 8, fontSize: 16 }}>
-                Tidak ada hasil untuk "{debounced}"
+                {`Tidak ada hasil untuk "${debounced}"`}
               </Text>
               <Text style={{ color: "#9ca3af", fontSize: 12, marginTop: 4 }}>
                 Coba kata kunci lain atau periksa ejaan
@@ -408,7 +410,8 @@ const TransactionScreen = () => {
               {loadingMore && (
                 <View style={{ paddingVertical: 16, alignItems: "center" }}>
                   <ActivityIndicator color="#3b82f6" />
-                  <Text style={{ marginTop: 8, color: "#6b7280", fontSize: 12 }}>
+                  <Text
+                    style={{ marginTop: 8, color: "#6b7280", fontSize: 12 }}>
                     Memuat produk lainnya...
                   </Text>
                 </View>
@@ -418,7 +421,8 @@ const TransactionScreen = () => {
               {!hasMoreData && !debounced && displayedItems.length > 0 && (
                 <View style={{ paddingVertical: 16, alignItems: "center" }}>
                   <Text style={{ color: "#9ca3af", fontSize: 12 }}>
-                    Semua produk telah ditampilkan ({displayedItems.length} produk)
+                    Semua produk telah ditampilkan ({displayedItems.length}{" "}
+                    produk)
                   </Text>
                 </View>
               )}

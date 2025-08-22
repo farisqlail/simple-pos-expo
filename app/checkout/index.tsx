@@ -183,7 +183,6 @@ const Checkout = () => {
         token
       );
 
-      Alert.alert("Sukses", "Transaksi berhasil dibuat.");
       clearCart();
       await AsyncStorage.setItem("tx:last_response", JSON.stringify(resp));
       router.replace({

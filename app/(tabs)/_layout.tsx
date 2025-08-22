@@ -34,6 +34,8 @@ export default function TabLayout() {
       router.push("/(tabs)/" as any);
     } else if (id === "transaksi") {
       router.push("/(tabs)/transactions/" as any);
+    } else if(id === "riwayat") {
+      router.push("/(tabs)/history/" as any);
     }
   };
 

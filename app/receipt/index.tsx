@@ -599,6 +599,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     width: "100%",
     padding: 8,
+    paddingTop: 10,
+    paddingBottom: 30,
     backgroundColor: "#fff",
     borderTopWidth: 1,
     borderTopColor: "#eee",

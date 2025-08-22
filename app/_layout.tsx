@@ -33,6 +33,7 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="checkout/index" options={{ headerShown: false }} />
         <Stack.Screen name="receipt/index" options={{ headerShown: false }} />
+        {/* <Stack.Screen name="history/index" options={{ headerShown: false }} /> */}
 
         <Stack.Screen name="+not-found" />
       </Stack>
