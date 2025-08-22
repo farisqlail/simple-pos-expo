@@ -12,7 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { STORAGE_KEYS } from "@/lib/storage/keys";
@@ -82,7 +82,7 @@ export default function Index() {
     Platform.OS === "android" ? (StatusBar.currentHeight ?? 0) : 0;
 
   return (
-    <>
+    <SafeAreaProvider>
       <SafeAreaView style={{ flex: 0, backgroundColor: "#B81D1D" }} />
       <SafeAreaView style={{ flex: 1, backgroundColor: "#F3F4F6" }}>
         {/* Header */}
@@ -261,6 +261,6 @@ export default function Index() {
         onRequestClose={hide}
         closable
       />
-    </>
+    </SafeAreaProvider>
   );
 }

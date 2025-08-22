@@ -1,4 +1,4 @@
-// app/receipt/index.tsx
+// app/receipt/index.tsx - Updated with fixed Bluetooth printer
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
@@ -8,7 +8,10 @@ import {
   TouchableOpacity,
   Image,
   ActivityIndicator,
+  Alert,
 } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+
 import { useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -51,6 +54,7 @@ export default function ReceiptScreen() {
   const [paired, setPaired] = useState<{ name: string; address: string }[]>([]);
   const [activeMac, setActiveMac] = useState<string | null>(null);
   const [printing, setPrinting] = useState(false);
+  const [printerLoading, setPrinterLoading] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -92,21 +96,79 @@ export default function ReceiptScreen() {
   }, []);
 
   const openPrinterPicker = async () => {
+    if (!PrinterService.isAvailable()) {
+      PrinterService.showSetupInstructions();
+      return;
+    }
+
+    setPrinterLoading(true);
     try {
       const list = await PrinterService.getPaired();
       setPaired(list);
       setPrinterOpen(true);
-    } catch (e) {
-      console.log("BT list error:", e);
+    } catch (error: any) {
+      console.log("Bluetooth list error:", error);
+      Alert.alert(
+        "Error Bluetooth",
+        error.message || "Failed to get Bluetooth devices",
+        [
+          { text: "OK" },
+          {
+            text: "Bantuan Setup",
+            onPress: () => PrinterService.showSetupInstructions(),
+          },
+        ]
+      );
       setPaired([]);
-      setPrinterOpen(true);
+    } finally {
+      setPrinterLoading(false);
     }
   };
 
   const handleChoosePrinter = async (mac: string) => {
-    await PrinterService.setActive(mac);
-    setActiveMac(mac);
-    setPrinterOpen(false);
+    try {
+      await PrinterService.setActive(mac);
+      setActiveMac(mac);
+      setPrinterOpen(false);
+
+      // Test connection immediately
+      Alert.alert(
+        "Test Printer",
+        "Apakah Anda ingin test print untuk memverifikasi koneksi?",
+        [
+          { text: "Skip", style: "cancel" },
+          { text: "Test Print", onPress: () => handleTestPrint(mac) },
+        ]
+      );
+    } catch (error: any) {
+      Alert.alert("Error", error.message || "Failed to set active printer");
+    }
+  };
+
+  const handleTestPrint = async (mac?: string) => {
+    const printerMac = mac || activeMac;
+    if (!printerMac) return;
+
+    setPrinting(true);
+    try {
+      await PrinterService.testPrint(printerMac);
+      Alert.alert("Sukses", "Test print berhasil dilakukan!");
+    } catch (error: any) {
+      console.log("Test print error:", error);
+      Alert.alert(
+        "Error Print",
+        error.message || "Gagal melakukan test print",
+        [
+          { text: "OK" },
+          {
+            text: "Bantuan",
+            onPress: () => showTroubleshootingHelp(),
+          },
+        ]
+      );
+    } finally {
+      setPrinting(false);
+    }
   };
 
   const handlePrint = async () => {
@@ -115,6 +177,12 @@ export default function ReceiptScreen() {
         await openPrinterPicker();
         return;
       }
+
+      if (!PrinterService.isAvailable()) {
+        PrinterService.showSetupInstructions();
+        return;
+      }
+
       setPrinting(true);
 
       const data: ReceiptData = {
@@ -124,8 +192,8 @@ export default function ReceiptScreen() {
         date,
         paymentMethod,
         subtotal,
-        adminFee,
-        service,
+        adminFee: adminFee || 0,
+        service: service || 0,
         total,
         amountReceived,
         change,
@@ -133,10 +201,57 @@ export default function ReceiptScreen() {
       };
 
       await PrinterService.printReceipt(activeMac, data);
-    } catch (e: any) {
-      console.log("Print error:", e);
+      Alert.alert("Sukses", "Struk berhasil dicetak!");
+    } catch (error: any) {
+      console.log("Print error:", error);
+      Alert.alert("Error Print", error.message || "Gagal mencetak struk", [
+        { text: "OK" },
+        {
+          text: "Coba Lagi",
+          onPress: () => {
+            // Disconnect and try again
+            PrinterService.disconnect();
+            setTimeout(() => handlePrint(), 1000);
+          },
+        },
+        {
+          text: "Bantuan",
+          onPress: () => showTroubleshootingHelp(),
+        },
+      ]);
     } finally {
       setPrinting(false);
+    }
+  };
+
+  const showTroubleshootingHelp = () => {
+    Alert.alert(
+      "Tips Troubleshooting",
+      "• Pastikan printer sudah menyala\n" +
+        "• Cek Bluetooth sudah aktif\n" +
+        "• Pastikan printer sudah dipasangkan di pengaturan HP\n" +
+        "• Coba matikan dan hidupkan printer\n" +
+        "• Dekatkan HP dengan printer\n" +
+        "• Pastikan printer ada kertas",
+      [
+        { text: "OK" },
+        {
+          text: "Bantuan Setup",
+          onPress: () => PrinterService.showSetupInstructions(),
+        },
+      ]
+    );
+  };
+
+  const handleRefreshPrinters = async () => {
+    setPrinterLoading(true);
+    try {
+      const list = await PrinterService.getPaired();
+      setPaired(list);
+    } catch (error: any) {
+      Alert.alert("Error", error.message || "Gagal refresh daftar printer");
+    } finally {
+      setPrinterLoading(false);
     }
   };
 
@@ -204,7 +319,7 @@ export default function ReceiptScreen() {
       change,
       items,
     };
-  }, [resp, storeName, storeAddress, storeLogo]); // ✅ tambahkan dependencies
+  }, [resp, storeName, storeAddress, storeLogo]);
 
   if (loading) {
     return (
@@ -213,7 +328,7 @@ export default function ReceiptScreen() {
           styles.container,
           { justifyContent: "center", alignItems: "center" },
         ]}>
-        <ActivityIndicator />
+        <ActivityIndicator size="large" color="#DA2424" />
         <Text style={{ color: "#6b7280", marginTop: 8 }}>Memuat struk…</Text>
       </View>
     );
@@ -237,194 +352,196 @@ export default function ReceiptScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.successIcon}>
-          <Ionicons name="checkmark-circle" size={70} color="#4CAF50" />
-        </View>
-        <Text style={styles.successText}>Transaksi Berhasil</Text>
+    <SafeAreaProvider>
+      <View style={styles.container}>
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <View style={styles.successIcon}>
+            <Ionicons name="checkmark-circle" size={70} color="#4CAF50" />
+          </View>
+          <Text style={styles.successText}>Transaksi Berhasil</Text>
 
-        <View style={styles.card}>
-          <View style={styles.storeRow}>
-            <Image source={{ uri: storeLogo }} style={styles.storeLogo} />
-            <View>
-              <Text style={styles.storeName}>{storeName}</Text>
-              <Text style={styles.storeAddress}>{storeAddress}</Text>
+          <View style={styles.card}>
+            <View style={styles.storeRow}>
+              <Image source={{ uri: storeLogo }} style={styles.storeLogo} />
+              <View>
+                <Text style={styles.storeName}>{storeName}</Text>
+                <Text style={styles.storeAddress}>{storeAddress}</Text>
+              </View>
             </View>
-          </View>
 
-          <View style={styles.divider} />
+            <View style={styles.divider} />
 
-          <Text style={styles.invoice}>{invoice}</Text>
-          <Text style={styles.date}>{date}</Text>
+            <Text style={styles.invoice}>{invoice}</Text>
+            <Text style={styles.date}>{date}</Text>
 
-          <RowBetween label="Metode Pembayaran" value={paymentMethod} bold />
-          <RowBetween label="Subtotal" value={formatCurrency(subtotal)} />
-          {adminFee > 0 && (
-            <RowBetween
-              label="Biaya Admin"
-              value={`+ ${formatCurrency(adminFee)}`}
-              valueColor="red"
-            />
-          )}
-          {service > 0 && (
-            <RowBetween
-              label="Service"
-              value={`+ ${formatCurrency(service)}`}
-              valueColor="red"
-            />
-          )}
-          <RowBetween label="Total Bayar" value={formatCurrency(total)} bold />
-          <RowBetween
-            label="Uang Diterima"
-            value={formatCurrency(amountReceived)}
-          />
-
-          <View style={styles.changeBox}>
-            <Text style={styles.changeLabel}>Kembalian</Text>
-            <Text style={styles.changeValue}>{formatCurrency(change)}</Text>
-          </View>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>DETAIL PEMBELIAN</Text>
-          {items.map((item: any, index: number) => (
-            <View key={index} style={styles.itemWrapper}>
+            <RowBetween label="Metode Pembayaran" value={paymentMethod} bold />
+            <RowBetween label="Subtotal" value={formatCurrency(subtotal)} />
+            {adminFee > 0 && (
               <RowBetween
-                label={`${item.qty}x ${item.name}`}
-                value={formatCurrency(item.price)}
+                label="Biaya Admin"
+                value={`+ ${formatCurrency(adminFee)}`}
+                valueColor="red"
               />
-              {item.details && (
-                <Text style={styles.itemDetails}>{item.details}</Text>
-              )}
-            </View>
-          ))}
-        </View>
-      </ScrollView>
+            )}
+            {service > 0 && (
+              <RowBetween
+                label="Service"
+                value={`+ ${formatCurrency(service)}`}
+                valueColor="red"
+              />
+            )}
+            <RowBetween
+              label="Total Bayar"
+              value={formatCurrency(total)}
+              bold
+            />
+            <RowBetween
+              label="Uang Diterima"
+              value={formatCurrency(amountReceived)}
+            />
 
-      <View style={styles.bottomBar}>
-        <TouchableOpacity
-          style={styles.printButton}
-          onPress={handlePrint}
-          disabled={printing}>
-          <Ionicons name="print" size={16} color="#DA2424" />
-          <Text style={styles.printText}>
-            {printing
-              ? "Mencetak..."
-              : activeMac
-              ? "Cetak Struk"
-              : "Pilih Printer"}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.newTransactionButton}
-          onPress={() => router.push("/(tabs)")}>
-          <Ionicons name="cart" size={16} color="#fff" />
-          <Text style={styles.newTransactionText}>Transaksi Baru</Text>
-        </TouchableOpacity>
-      </View>
-
-      {printerOpen && (
-        <View
-          style={{
-            position: "absolute",
-            left: 0,
-            right: 0,
-            top: 0,
-            bottom: 0,
-            backgroundColor: "rgba(0,0,0,0.35)",
-            justifyContent: "center",
-            alignItems: "center",
-            padding: 16,
-          }}>
-          <View
-            style={{
-              backgroundColor: "#fff",
-              borderRadius: 10,
-              width: "100%",
-              maxWidth: 420,
-            }}>
-            <View
-              style={{
-                padding: 14,
-                borderBottomWidth: StyleSheet.hairlineWidth,
-                borderBottomColor: "#eee",
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}>
-              <Text style={{ fontWeight: "800" }}>Pilih Printer Bluetooth</Text>
-              <TouchableOpacity onPress={() => setPrinterOpen(false)}>
-                <Ionicons name="close" size={20} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={{ maxHeight: 320 }}>
-              {paired.length === 0 ? (
-                <View style={{ padding: 16 }}>
-                  <Text style={{ color: "#6b7280" }}>
-                    Tidak ada perangkat terpasang.
-                  </Text>
-                </View>
-              ) : (
-                paired.map((d) => (
-                  <TouchableOpacity
-                    key={d.address}
-                    onPress={() => handleChoosePrinter(d.address)}
-                    style={{
-                      paddingHorizontal: 16,
-                      paddingVertical: 12,
-                      borderBottomWidth: StyleSheet.hairlineWidth,
-                      borderBottomColor: "#eee",
-                      backgroundColor:
-                        activeMac === d.address ? "#FEE2E2" : "#fff",
-                    }}>
-                    <Text style={{ fontWeight: "700" }}>
-                      {d.name || "(Tanpa nama)"}
-                    </Text>
-                    <Text style={{ color: "#6b7280", fontSize: 12 }}>
-                      {d.address}
-                    </Text>
-                    {activeMac === d.address && (
-                      <Text
-                        style={{
-                          color: "#b91c1c",
-                          fontSize: 12,
-                          marginTop: 4,
-                        }}>
-                        Aktif
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                ))
-              )}
-            </ScrollView>
-
-            <View
-              style={{
-                padding: 12,
-                flexDirection: "row",
-                justifyContent: "flex-end",
-                gap: 10,
-              }}>
-              <TouchableOpacity
-                onPress={() => setPrinterOpen(false)}
-                style={{
-                  paddingHorizontal: 14,
-                  paddingVertical: 10,
-                  borderRadius: 8,
-                  borderWidth: 1,
-                  borderColor: "#b91c1c",
-                }}>
-                <Text style={{ color: "#b91c1c", fontWeight: "700" }}>
-                  Tutup
-                </Text>
-              </TouchableOpacity>
+            <View style={styles.changeBox}>
+              <Text style={styles.changeLabel}>Kembalian</Text>
+              <Text style={styles.changeValue}>{formatCurrency(change)}</Text>
             </View>
           </View>
+
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>DETAIL PEMBELIAN</Text>
+            {items.map((item: any, index: number) => (
+              <View key={index} style={styles.itemWrapper}>
+                <RowBetween
+                  label={`${item.qty}x ${item.name}`}
+                  value={formatCurrency(item.price)}
+                />
+                {item.details && (
+                  <Text style={styles.itemDetails}>{item.details}</Text>
+                )}
+              </View>
+            ))}
+          </View>
+        </ScrollView>
+
+        <View style={styles.bottomBar}>
+          <TouchableOpacity
+            style={styles.printButton}
+            onPress={handlePrint}
+            disabled={printing || printerLoading}>
+            {printing || printerLoading ? (
+              <ActivityIndicator size="small" color="#DA2424" />
+            ) : (
+              <Ionicons name="print" size={16} color="#DA2424" />
+            )}
+            <Text style={styles.printText}>
+              {printing
+                ? "Mencetak..."
+                : printerLoading
+                ? "Loading..."
+                : activeMac
+                ? "Cetak Struk"
+                : "Pilih Printer"}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.newTransactionButton}
+            onPress={() => router.push("/(tabs)")}>
+            <Ionicons name="cart" size={16} color="#fff" />
+            <Text style={styles.newTransactionText}>Transaksi Baru</Text>
+          </TouchableOpacity>
         </View>
-      )}
-    </View>
+
+        {/* Enhanced Printer Picker Modal */}
+        {printerOpen && (
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContainer}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Pilih Printer Bluetooth</Text>
+                <TouchableOpacity onPress={() => setPrinterOpen(false)}>
+                  <Ionicons name="close" size={20} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.deviceList}>
+                {printerLoading ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#DA2424" />
+                    <Text style={styles.loadingText}>Mencari printer...</Text>
+                  </View>
+                ) : paired.length === 0 ? (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>
+                      Tidak ada perangkat terpasang.
+                    </Text>
+                    <Text style={styles.emptySubText}>
+                      Pastikan printer sudah dipasangkan di pengaturan
+                      Bluetooth.
+                    </Text>
+                  </View>
+                ) : (
+                  paired.map((device) => (
+                    <TouchableOpacity
+                      key={device.address}
+                      onPress={() => handleChoosePrinter(device.address)}
+                      style={[
+                        styles.deviceItem,
+                        activeMac === device.address && styles.activeDevice,
+                      ]}>
+                      <View style={styles.deviceInfo}>
+                        <Text style={styles.deviceName}>
+                          {device.name || "(Tanpa nama)"}
+                        </Text>
+                        <Text style={styles.deviceAddress}>
+                          {device.address}
+                        </Text>
+                        {activeMac === device.address && (
+                          <Text style={styles.activeLabel}>Aktif</Text>
+                        )}
+                      </View>
+                      <Ionicons
+                        name={
+                          activeMac === device.address
+                            ? "checkmark-circle"
+                            : "chevron-forward"
+                        }
+                        size={20}
+                        color={
+                          activeMac === device.address ? "#b91c1c" : "#6b7280"
+                        }
+                      />
+                    </TouchableOpacity>
+                  ))
+                )}
+              </ScrollView>
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  onPress={handleRefreshPrinters}
+                  style={styles.refreshButton}
+                  disabled={printerLoading}>
+                  <Ionicons name="refresh" size={16} color="#6b7280" />
+                  <Text style={styles.refreshText}>Refresh</Text>
+                </TouchableOpacity>
+
+                {activeMac && (
+                  <TouchableOpacity
+                    onPress={() => handleTestPrint()}
+                    style={styles.testButton}
+                    disabled={printing}>
+                    <Text style={styles.testButtonText}>Test Print</Text>
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity
+                  onPress={() => setPrinterOpen(false)}
+                  style={styles.closeButton}>
+                  <Text style={styles.closeButtonText}>Tutup</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
+      </View>
+    </SafeAreaProvider>
   );
 }
 
@@ -495,8 +612,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginRight: 6,
+    gap: 8,
   },
-  printText: { color: "#DA2424", marginLeft: 4, fontWeight: "bold" },
+  printText: { color: "#DA2424", fontWeight: "bold" },
   newTransactionButton: {
     flex: 1,
     backgroundColor: "#DA2424",
@@ -508,4 +626,133 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   newTransactionText: { color: "#fff", fontWeight: "bold" },
+
+  // Modal styles
+  modalOverlay: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 16,
+    zIndex: 1000,
+  },
+  modalContainer: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    width: "100%",
+    maxWidth: 420,
+    maxHeight: "80%",
+  },
+  modalHeader: {
+    padding: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#eee",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  modalTitle: {
+    fontWeight: "800",
+    fontSize: 16,
+  },
+  deviceList: {
+    maxHeight: 300,
+  },
+  loadingContainer: {
+    padding: 40,
+    alignItems: "center",
+  },
+  loadingText: {
+    marginTop: 12,
+    color: "#6b7280",
+  },
+  emptyContainer: {
+    padding: 20,
+    alignItems: "center",
+  },
+  emptyText: {
+    color: "#6b7280",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  emptySubText: {
+    color: "#9ca3af",
+    fontSize: 12,
+    marginTop: 4,
+    textAlign: "center",
+  },
+  deviceItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#eee",
+    backgroundColor: "#fff",
+  },
+  activeDevice: {
+    backgroundColor: "#FEE2E2",
+  },
+  deviceInfo: {
+    flex: 1,
+  },
+  deviceName: {
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  deviceAddress: {
+    color: "#6b7280",
+    fontSize: 12,
+    marginTop: 2,
+  },
+  activeLabel: {
+    color: "#b91c1c",
+    fontSize: 12,
+    marginTop: 4,
+  },
+  modalActions: {
+    padding: 12,
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 10,
+  },
+  refreshButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+    gap: 4,
+  },
+  refreshText: {
+    color: "#6b7280",
+    fontSize: 12,
+  },
+  testButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+    backgroundColor: "#f3f4f6",
+  },
+  testButtonText: {
+    color: "#374151",
+    fontWeight: "600",
+    fontSize: 12,
+  },
+  closeButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#b91c1c",
+  },
+  closeButtonText: {
+    color: "#b91c1c",
+    fontWeight: "700",
+  },
 });

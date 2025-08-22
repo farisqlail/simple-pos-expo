@@ -1,7 +1,7 @@
 // components/ui/BottomNav.tsx
-import React from 'react';
-import { View, Text, TouchableOpacity, ViewStyle } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import React, { memo } from "react";
+import { View, Text, TouchableOpacity, ViewStyle, StyleProp } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 export interface NavItem {
   id: string;
@@ -16,75 +16,69 @@ export interface BottomNavProps {
   backgroundColor?: string;
   activeColor?: string;
   inactiveColor?: string;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>; // <- agar bisa array/merge
 }
 
 const BottomNav: React.FC<BottomNavProps> = ({
   items,
   activeId,
-  backgroundColor = '#ffffff',
-  activeColor = '#ef4444',
-  inactiveColor = '#6b7280',
-  style
+  backgroundColor = "#ffffff",
+  activeColor = "#ef4444",
+  inactiveColor = "#6b7280",
+  style,
 }) => {
   return (
-    <View 
+    <View
       style={[
         {
-          flexDirection: 'row',
+          flexDirection: "row",
           backgroundColor,
           paddingVertical: 12,
           paddingHorizontal: 16,
           borderTopLeftRadius: 16,
           borderTopRightRadius: 16,
-          shadowColor: '#000',
-          shadowOffset: {
-            width: 0,
-            height: -2,
-          },
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: -2 },
           shadowOpacity: 0.1,
           shadowRadius: 3.84,
           elevation: 5,
+          paddingBottom: 20
         },
-        style
+        style,
       ]}
     >
-      {items.map((item, index) => {
+      {items.map((item) => {
         const isActive = activeId === item.id;
         const itemColor = isActive ? activeColor : inactiveColor;
-        
+
         return (
           <TouchableOpacity
             key={item.id}
             onPress={item.onPress}
             style={{
               flex: 1,
-              alignItems: 'center',
-              justifyContent: 'center',
+              alignItems: "center",
+              justifyContent: "center",
               paddingVertical: 8,
             }}
             activeOpacity={0.7}
           >
             <View
               style={{
-                flexDirection: 'row',
-                alignItems: 'center',
+                flexDirection: "row",
+                alignItems: "center",
                 paddingHorizontal: 16,
                 paddingVertical: 8,
-                backgroundColor: isActive ? `${activeColor}15` : 'transparent',
+                borderRadius: 8, // pengganti className="rounded-lg"
+                backgroundColor: isActive ? `${activeColor}15` : "transparent",
               }}
-              className="rounded-lg"
             >
-              <Ionicons
-                name={item.icon}
-                size={20}
-                color={itemColor}
-              />
+              <Ionicons name={item.icon} size={20} color={itemColor} />
               <Text
                 style={{
                   marginLeft: 8,
                   fontSize: 14,
-                  fontWeight: isActive ? '600' : '400',
+                  fontWeight: isActive ? "600" : "400",
                   color: itemColor,
                 }}
               >
@@ -98,4 +92,4 @@ const BottomNav: React.FC<BottomNavProps> = ({
   );
 };
 
-export default BottomNav;
+export default memo(BottomNav);

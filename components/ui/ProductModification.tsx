@@ -11,6 +11,7 @@ import {
   StyleSheet,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import QuantitySelector from "./QuantitySelector";
 
 interface Option {
@@ -31,7 +32,6 @@ interface ProductModificationProps {
   onClose: () => void;
   onSave?: (modifications: any) => void;
 }
-
 
 const OptionSection = ({
   title,
@@ -57,9 +57,7 @@ const OptionSection = ({
         <Text style={styles.sectionTitle}>{title}</Text>
         <Text
           style={
-            note.includes("Wajib")
-              ? styles.sectionRequired
-              : styles.sectionOptional
+            note.includes("Wajib") ? styles.sectionRequired : styles.sectionOptional
           }>
           {note}
         </Text>
@@ -83,20 +81,12 @@ const OptionSection = ({
             <View style={styles.optionLeft}>
               {multiple ? (
                 <View
-                  style={[
-                    styles.checkbox,
-                    isSelected && styles.checkboxSelected,
-                  ]}>
-                  {isSelected && (
-                    <Ionicons name="checkmark" size={12} color="white" />
-                  )}
+                  style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+                  {isSelected && <Ionicons name="checkmark" size={12} color="white" />}
                 </View>
               ) : (
                 <View
-                  style={[
-                    styles.radioOuter,
-                    isSelected && styles.radioOuterSelected,
-                  ]}>
+                  style={[styles.radioOuter, isSelected && styles.radioOuterSelected]}>
                   {isSelected && <View style={styles.radioInner} />}
                 </View>
               )}
@@ -125,10 +115,10 @@ const ProductModification: React.FC<ProductModificationProps> = ({
   onClose,
   onSave,
 }) => {
+  const insets = useSafeAreaInsets();
+
   const [selectedSize, setSelectedSize] = useState(sizeOptions[0]?.name || "");
-  const [selectedSugar, setSelectedSugar] = useState(
-    sugarOptions[0]?.name || ""
-  );
+  const [selectedSugar, setSelectedSugar] = useState(sugarOptions[0]?.name || "");
   const [selectedToppings, setSelectedToppings] = useState<string[]>([]);
   const [quantity, setQuantity] = useState(1);
   const [isTakeaway] = useState(true);
@@ -138,8 +128,8 @@ const ProductModification: React.FC<ProductModificationProps> = ({
       prev.includes(topping)
         ? prev.filter((t) => t !== topping)
         : prev.length < 3
-          ? [...prev, topping]
-          : prev
+        ? [...prev, topping]
+        : prev
     );
   };
 
@@ -164,9 +154,11 @@ const ProductModification: React.FC<ProductModificationProps> = ({
     <Modal
       visible={isVisible}
       animationType="slide"
-      presentationStyle="fullScreen">
+      presentationStyle="fullScreen"
+      statusBarTranslucent 
+    >
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-      <View style={styles.container}>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.headerBack}>
@@ -179,11 +171,7 @@ const ProductModification: React.FC<ProductModificationProps> = ({
           {/* Product Info */}
           <View style={styles.productCard}>
             <View style={styles.productRow}>
-              <Image
-                source={productImage}
-                style={styles.productImage}
-                resizeMode="cover"
-              />
+              <Image source={productImage} style={styles.productImage} resizeMode="cover" />
               <View style={styles.productInfo}>
                 <Text style={styles.productName}>{productName}</Text>
                 <View style={styles.priceRow}>
@@ -237,7 +225,7 @@ const ProductModification: React.FC<ProductModificationProps> = ({
         </ScrollView>
 
         {/* Footer */}
-        <View style={styles.footerContainer}>
+        <View style={[styles.footerContainer, { paddingBottom: 16 + insets.bottom }]}>
           <View style={styles.flexItem}>
             <QuantitySelector value={quantity} onChange={setQuantity} />
           </View>
@@ -345,12 +333,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   radioOuterSelected: { borderColor: "#DC2626", backgroundColor: "#DC2626" },
-  radioInner: {
-    width: 8,
-    height: 8,
-    backgroundColor: "white",
-    borderRadius: 4,
-  },
+  radioInner: { width: 8, height: 8, backgroundColor: "white", borderRadius: 4 },
   checkbox: {
     width: 20,
     height: 20,

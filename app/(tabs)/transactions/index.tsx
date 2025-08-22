@@ -1,5 +1,5 @@
 // app/(tabs)/transactions/index.tsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   Dimensions,
   ScrollView,
@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useCartStore } from "@/lib/store/useCartStore";
 
 import Header from "@/components/ui/Header";
@@ -68,13 +68,17 @@ interface ProductNode {
   stockonhand?: number;
   stock?: number;
   discount_tag?: string | null;
-  data_modifiers?: ModNode[]; // dari API
+  data_modifiers?: ModNode[];
 }
 
 const STORAGE_KEYS = {
   USER: "auth_user",
   SELECTED_LOCATION: "selected_location",
 } as const;
+
+// Configuration untuk partial loading
+const BATCH_SIZE = 20; // Jumlah produk per batch
+const INITIAL_LOAD_SIZE = 30; // Produk yang dimuat pertama kali
 
 function formatPriceNoRp(n: number | string) {
   const num = typeof n === "string" ? Number(n.replace(/[^\d]/g, "")) : n;
@@ -102,7 +106,6 @@ function toImageProp(url?: string) {
 
 function extractToppings(mods?: ModNode[]): Option[] {
   if (!Array.isArray(mods) || mods.length === 0) return [];
-  // hanya child + aktif
   const children = mods.filter(
     (m) =>
       (m.mdf_parent ?? 0) !== 0 && (m.is_active ? m.is_active === "1" : true)
@@ -113,22 +116,51 @@ function extractToppings(mods?: ModNode[]): Option[] {
   }));
 }
 
+function convertProductNodeToProduct(p: ProductNode): Product {
+  const outOfStock =
+    (p.is_using_stock === "yes" || p.is_using_stock === true) &&
+    (Number(p.stock) <= 0 || Number(p.stockonhand) <= 0);
+
+  const imgProp = toImageProp(p.product_images) ?? null;
+  const toppingOptions = extractToppings(p.data_modifiers);
+
+  return {
+    productId: String(p.product_id),
+    name: p.product_name || "-",
+    price: formatPriceNoRp(p.product_pricenow ?? 0),
+    discount: p.discount_tag ?? undefined,
+    image: imgProp || productImg,
+    initials: (p.product_name || "-").slice(0, 2).toUpperCase(),
+    outOfStock,
+    sizeOptions: [],
+    sugarOptions: [],
+    toppingOptions,
+  };
+}
+
 const TransactionScreen = () => {
   const [showModification, setShowModification] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const router = useRouter();
 
-  // ✅ Hooks store dipanggil di dalam komponen (sesuai rules-of-hooks)
   const addItem = useCartStore((s) => s.addItem);
   const clearCart = useCartStore((s) => s.clearCart);
 
-  const [loading, setLoading] = useState(true);
-  const [items, setItems] = useState<Product[]>([]);
+  // Loading states
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // SEARCH
+  // Data states
+  const [allProductsData, setAllProductsData] = useState<ProductNode[]>([]);
+  const [displayedItems, setDisplayedItems] = useState<Product[]>([]);
+  const [hasMoreData, setHasMoreData] = useState(false);
+  const [currentBatchIndex, setCurrentBatchIndex] = useState(0);
+
+  // Search
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
+
   useEffect(() => {
     const t = setTimeout(() => setDebounced(query), 250);
     return () => clearTimeout(t);
@@ -142,10 +174,11 @@ const TransactionScreen = () => {
   const itemWidth =
     (screenWidth - horizontalPadding * 2 - gap * (numColumns - 1)) / numColumns;
 
+  // Load data dari cache dan setup initial batch
   useEffect(() => {
     (async () => {
       try {
-        setLoading(true);
+        setInitialLoading(true);
         setError(null);
 
         const [rawUser, rawLoc] = await Promise.all([
@@ -167,60 +200,81 @@ const TransactionScreen = () => {
         const cacheKey = `products:${appid}:${locId}`;
         const rawCache = await AsyncStorage.getItem(cacheKey);
         if (!rawCache) {
-          setItems([]);
+          setDisplayedItems([]);
+          setAllProductsData([]);
           setError("Data produk belum tersedia. Silakan Sync Data di beranda.");
           return;
         }
 
         const parsed: CachedProducts = JSON.parse(rawCache);
-
-        const flat: Product[] = (parsed.data || [])
+        const flatProductNodes: ProductNode[] = (parsed.data || [])
           .flatMap((cat) => cat?.data_products || [])
-          .filter(Boolean)
-          .map((p: ProductNode): Product => {
-            const outOfStock =
-              (p.is_using_stock === "yes" || p.is_using_stock === true) &&
-              (Number(p.stock) <= 0 || Number(p.stockonhand) <= 0);
+          .filter(Boolean);
 
-            const imgProp = toImageProp(p.product_images) ?? null;
+        setAllProductsData(flatProductNodes);
 
-            // === TOPPINGS dari data_modifiers
-            const toppingOptions = extractToppings(p.data_modifiers);
+        // Load initial batch
+        const initialBatch = flatProductNodes
+          .slice(0, INITIAL_LOAD_SIZE)
+          .map(convertProductNodeToProduct);
 
-            return {
-              productId: String(p.product_id),
-              name: p.product_name || "-",
-              price: formatPriceNoRp(p.product_pricenow ?? 0),
-              discount: p.discount_tag ?? undefined,
-              image: imgProp || productImg,
-              initials: (p.product_name || "-").slice(0, 2).toUpperCase(),
-              outOfStock,
-              sizeOptions: [],
-              sugarOptions: [],
-              toppingOptions,
-            };
-          });
+        setDisplayedItems(initialBatch);
+        setCurrentBatchIndex(1);
+        setHasMoreData(flatProductNodes.length > INITIAL_LOAD_SIZE);
 
-        setItems(flat);
       } catch (e: any) {
         console.log("Load local products error:", e);
         setError(e?.message ?? "Gagal memuat produk lokal.");
+        setDisplayedItems([]);
+        setAllProductsData([]);
       } finally {
-        setLoading(false);
+        setInitialLoading(false);
       }
     })();
   }, []);
 
-  // Filtered by search (name & price)
+  // Load more data function
+  const loadMoreData = useCallback(async () => {
+    if (loadingMore || !hasMoreData) return;
+
+    setLoadingMore(true);
+
+    // Simulasi delay untuk UX yang lebih smooth
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    const startIndex = currentBatchIndex * BATCH_SIZE;
+    const endIndex = startIndex + BATCH_SIZE;
+    
+    const nextBatch = allProductsData
+      .slice(startIndex, endIndex)
+      .map(convertProductNodeToProduct);
+
+    if (nextBatch.length > 0) {
+      setDisplayedItems(prev => [...prev, ...nextBatch]);
+      setCurrentBatchIndex(prev => prev + 1);
+    }
+
+    setHasMoreData(endIndex < allProductsData.length);
+    setLoadingMore(false);
+  }, [allProductsData, currentBatchIndex, loadingMore, hasMoreData]);
+
+  // Filtered items berdasarkan search
   const filteredItems = useMemo(() => {
     const q = normalizeStr(debounced);
-    if (!q) return items;
-    return items.filter((it) => {
-      const name = normalizeStr(it.name);
-      const price = normalizeStr(it.price);
-      return name.includes(q) || price.includes(q);
-    });
-  }, [items, debounced]);
+    if (!q) return displayedItems;
+
+    // Jika ada search query, cari di semua data untuk hasil yang lengkap
+    if (q) {
+      const allConverted = allProductsData.map(convertProductNodeToProduct);
+      return allConverted.filter((it) => {
+        const name = normalizeStr(it.name);
+        const price = normalizeStr(it.price);
+        return name.includes(q) || price.includes(q);
+      });
+    }
+
+    return displayedItems;
+  }, [displayedItems, allProductsData, debounced]);
 
   const handleProductPress = (product: Product) => {
     if (!product.outOfStock) {
@@ -243,11 +297,13 @@ const TransactionScreen = () => {
     const perUnit = Math.round(mods.total / Math.max(mods.quantity, 1));
     const unitAddons = Math.max(perUnit - base, 0);
 
-    const key = `${selectedProduct.productId}|${selectedProduct.name}|${mods.size || ""}|${mods.sugar || ""}|${(mods.toppings || []).sort().join(",")}`;
+    const key = `${selectedProduct.productId}|${selectedProduct.name}|${
+      mods.size || ""
+    }|${mods.sugar || ""}|${(mods.toppings || []).sort().join(",")}`;
 
     addItem({
       id: key,
-      prodId: selectedProduct.productId, // utk API
+      prodId: selectedProduct.productId,
       name: selectedProduct.name,
       unitBasePrice: base,
       unitAddonsPrice: unitAddons,
@@ -263,9 +319,26 @@ const TransactionScreen = () => {
     setShowModification(false);
   };
 
+  // Handle scroll untuk infinite scroll
+  const handleScroll = useCallback((event: any) => {
+    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+    const paddingToBottom = 200; // Trigger load more saat 200px dari bottom
+    
+    if (
+      layoutMeasurement.height + contentOffset.y >=
+      contentSize.height - paddingToBottom
+    ) {
+      loadMoreData();
+    }
+  }, [loadMoreData]);
+
   return (
-    <>
-      <ScrollView className="bg-gray-100 flex-1">
+    <SafeAreaProvider>
+      <ScrollView 
+        className="bg-gray-100 flex-1"
+        onScroll={handleScroll}
+        scrollEventThrottle={400}
+      >
         <Header title="Transaksi Baru" showBackButton={false} />
 
         <View className="p-4">
@@ -276,46 +349,80 @@ const TransactionScreen = () => {
             icon={<Ionicons name="search" size={20} color="#6b7280" />}
           />
 
-          {/* State handling */}
-          {loading ? (
+          {/* Initial Loading State */}
+          {initialLoading ? (
             <View style={{ paddingVertical: 32, alignItems: "center" }}>
-              <ActivityIndicator />
+              <ActivityIndicator size="large" color="#3b82f6" />
               <Text style={{ marginTop: 8, color: "#6b7280" }}>
-                Memuat produk dari penyimpanan…
+                Memuat produk...
               </Text>
             </View>
           ) : error ? (
             <View style={{ paddingVertical: 24 }}>
-              <Text style={{ color: "#b91c1c" }}>{error}</Text>
+              <Text style={{ color: "#b91c1c", fontSize: 16 }}>{error}</Text>
               <Text style={{ color: "#6b7280", marginTop: 4, fontSize: 12 }}>
                 Buka beranda dan lakukan Sync Data untuk mengisi cache produk.
               </Text>
             </View>
+          ) : filteredItems.length === 0 && debounced ? (
+            <View style={{ paddingVertical: 24, alignItems: "center" }}>
+              <Ionicons name="search-outline" size={48} color="#9ca3af" />
+              <Text style={{ color: "#6b7280", marginTop: 8, fontSize: 16 }}>
+                Tidak ada hasil untuk "{debounced}"
+              </Text>
+              <Text style={{ color: "#9ca3af", fontSize: 12, marginTop: 4 }}>
+                Coba kata kunci lain atau periksa ejaan
+              </Text>
+            </View>
           ) : filteredItems.length === 0 ? (
-            <View style={{ paddingVertical: 24 }}>
-              <Text style={{ color: "#6b7280" }}>
-                Tidak ada hasil untuk “{query}”.
+            <View style={{ paddingVertical: 24, alignItems: "center" }}>
+              <Ionicons name="cube-outline" size={48} color="#9ca3af" />
+              <Text style={{ color: "#6b7280", marginTop: 8, fontSize: 16 }}>
+                Belum ada produk tersedia
               </Text>
             </View>
           ) : (
-            <View
-              className="mt-4"
-              style={{ flexDirection: "row", flexWrap: "wrap", gap }}
-            >
-              {filteredItems.map((item, index) => (
-                <View key={`${item.name}-${index}`} style={{ width: itemWidth }}>
-                  <ProductCard
-                    name={item.name}
-                    price={item.price}
-                    image={item.image}
-                    initials={item.initials}
-                    outOfStock={item.outOfStock}
-                    cardWidth={itemWidth}
-                    onPress={() => handleProductPress(item)}
-                  />
+            <>
+              {/* Products Grid */}
+              <View
+                className="mt-4"
+                style={{ flexDirection: "row", flexWrap: "wrap", gap }}>
+                {filteredItems.map((item, index) => (
+                  <View
+                    key={`${item.productId}-${index}`}
+                    style={{ width: itemWidth }}>
+                    <ProductCard
+                      name={item.name}
+                      price={item.price}
+                      image={item.image}
+                      initials={item.initials}
+                      outOfStock={item.outOfStock}
+                      cardWidth={itemWidth}
+                      onPress={() => handleProductPress(item)}
+                    />
+                  </View>
+                ))}
+              </View>
+
+              {/* Load More Indicator */}
+              {loadingMore && (
+                <View style={{ paddingVertical: 16, alignItems: "center" }}>
+                  <ActivityIndicator color="#3b82f6" />
+                  <Text style={{ marginTop: 8, color: "#6b7280", fontSize: 12 }}>
+                    Memuat produk lainnya...
+                  </Text>
                 </View>
-              ))}
-            </View>
+              )}
+
+              {/* End of Data Indicator */}
+              {!hasMoreData && !debounced && displayedItems.length > 0 && (
+                <View style={{ paddingVertical: 16, alignItems: "center" }}>
+                  <Text style={{ color: "#9ca3af", fontSize: 12 }}>
+                    Semua produk telah ditampilkan ({displayedItems.length} produk)
+                  </Text>
+                </View>
+              )}
+            </>
           )}
         </View>
       </ScrollView>
@@ -341,7 +448,7 @@ const TransactionScreen = () => {
         onCancel={clearCart}
         onPay={() => router.push("/checkout")}
       />
-    </>
+    </SafeAreaProvider>
   );
 };
 

@@ -10,10 +10,12 @@ import {
   ScrollView,
   Alert,
 } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
+
 import Header from "@/components/ui/Header";
 import BottomBar from "@/components/ui/BottomBar";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCartStore } from "@/lib/store/useCartStore";
 import { createResource } from "@/lib/api/fetch";
 
@@ -25,7 +27,8 @@ const Checkout = () => {
   const clearCart = useCartStore((s) => s.clear);
 
   const { subtotal, itemCount } = useMemo(() => {
-    let sub = 0, count = 0;
+    let sub = 0,
+      count = 0;
     for (const it of items) {
       const unit = it.unitBasePrice + it.unitAddonsPrice;
       sub += unit * it.quantity;
@@ -60,7 +63,10 @@ const Checkout = () => {
       }
 
       if (!selectedAmount || selectedAmount < totalBayar) {
-        Alert.alert("Nominal kurang", "Masukkan nominal yang cukup untuk membayar.");
+        Alert.alert(
+          "Nominal kurang",
+          "Masukkan nominal yang cukup untuk membayar."
+        );
         return;
       }
 
@@ -171,12 +177,19 @@ const Checkout = () => {
         },
       };
 
-      const resp = await createResource<any>("transaction/create", payload, token);
+      const resp = await createResource<any>(
+        "transaction/create",
+        payload,
+        token
+      );
 
       Alert.alert("Sukses", "Transaksi berhasil dibuat.");
       clearCart();
       await AsyncStorage.setItem("tx:last_response", JSON.stringify(resp));
-      router.replace({ pathname: "/receipt", params: { ts: String(Date.now()) } });
+      router.replace({
+        pathname: "/receipt",
+        params: { ts: String(Date.now()) },
+      });
     } catch (e: any) {
       console.log("Create transaction error:", e);
       Alert.alert("Gagal", e?.message ?? "Gagal membuat transaksi.");
@@ -184,91 +197,97 @@ const Checkout = () => {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#f9fafb" }}>
-      <Header title="Struk Transaksi" showBackButton textColor="text-white" backIconColor="#fff" />
+    <SafeAreaProvider>
+      <View style={{ flex: 1, backgroundColor: "#f9fafb" }}>
+        <Header
+          title="Struk Transaksi"
+          showBackButton
+          textColor="text-white"
+          backIconColor="#fff"
+        />
 
-      <ScrollView contentContainerStyle={{ padding: 16 }}>
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>RINGKASAN BELANJA</Text>
+        <ScrollView contentContainerStyle={{ padding: 16 }}>
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>RINGKASAN BELANJA</Text>
 
-          {items.map((it) => {
-            const line = (it.unitBasePrice + it.unitAddonsPrice) * it.quantity;
-            return (
-              <View key={it.id} style={{ marginBottom: 6 }}>
-                <Text style={{ fontWeight: "600", color: "#111827" }}>
-                  {it.name} × {it.quantity}
-                </Text>
-                <Text style={{ color: "#6b7280", fontSize: 12 }}>
-                  {formatCurrency(line)}
-                </Text>
-              </View>
-            );
-          })}
+            {items.map((it) => {
+              const line =
+                (it.unitBasePrice + it.unitAddonsPrice) * it.quantity;
+              return (
+                <View key={it.id} style={{ marginBottom: 6 }}>
+                  <Text style={{ fontWeight: "600", color: "#111827" }}>
+                    {it.name} × {it.quantity}
+                  </Text>
+                  <Text style={{ color: "#6b7280", fontSize: 12 }}>
+                    {formatCurrency(line)}
+                  </Text>
+                </View>
+              );
+            })}
 
-          <View style={styles.row}>
-            <Text>Subtotal</Text>
-            <Text>{formatCurrency(subtotal)}</Text>
+            <View style={styles.row}>
+              <Text>Subtotal</Text>
+              <Text>{formatCurrency(subtotal)}</Text>
+            </View>
+
+            <View style={styles.row}>
+              <Text>Service (10%)</Text>
+              <Text style={{ color: "red" }}>+ {formatCurrency(service)}</Text>
+            </View>
+
+            <View style={styles.row}>
+              <Text style={styles.bold}>Total Bayar</Text>
+              <Text style={styles.bold}>{formatCurrency(totalBayar)}</Text>
+            </View>
           </View>
 
-          <View style={styles.row}>
-            <Text>Service (10%)</Text>
-            <Text style={{ color: "red" }}>+ {formatCurrency(service)}</Text>
-          </View>
+          <View style={[styles.card, { marginTop: 16 }]}>
+            <Text style={styles.sectionTitle}>PILIH METODE PEMBAYARAN</Text>
+            <View style={styles.inputWrapper}>
+              <Ionicons name="card-outline" size={20} color="#6b7280" />
+              <TextInput
+                style={styles.input}
+                keyboardType="numeric"
+                placeholder="Masukkan nominal"
+                value={selectedAmount ? String(selectedAmount) : ""}
+                onChangeText={(val) => {
+                  const digits = val.replace(/[^\d]/g, "");
+                  setSelectedAmount(digits ? Number(digits) : null);
+                }}
+              />
+            </View>
 
-          <View style={styles.row}>
-            <Text style={styles.bold}>Total Bayar</Text>
-            <Text style={styles.bold}>{formatCurrency(totalBayar)}</Text>
-          </View>
-        </View>
-
-        <View style={[styles.card, { marginTop: 16 }]}>
-          <Text style={styles.sectionTitle}>PILIH METODE PEMBAYARAN</Text>
-          <View style={styles.inputWrapper}>
-            <Ionicons name="card-outline" size={20} color="#6b7280" />
-            <TextInput
-              style={styles.input}
-              keyboardType="numeric"
-              placeholder="Masukkan nominal"
-              value={selectedAmount ? String(selectedAmount) : ""}
-              onChangeText={(val) => {
-                const digits = val.replace(/[^\d]/g, "");
-                setSelectedAmount(digits ? Number(digits) : null);
-              }}
-            />
-          </View>
-
-          <View style={styles.moneyButtons}>
-            {moneyOptions.map((amount, i) => (
-              <TouchableOpacity
-                key={amount}
-                style={[
-                  styles.moneyButton,
-                  selectedAmount === amount && styles.moneyButtonActive,
-                ]}
-                onPress={() => setSelectedAmount(amount)}
-              >
-                <Text
+            <View style={styles.moneyButtons}>
+              {moneyOptions.map((amount, i) => (
+                <TouchableOpacity
+                  key={amount}
                   style={[
-                    styles.moneyButtonText,
-                    selectedAmount === amount && styles.moneyButtonTextActive,
+                    styles.moneyButton,
+                    selectedAmount === amount && styles.moneyButtonActive,
                   ]}
-                >
-                  {i === 0 ? "Uang Pas" : amount.toLocaleString("id-ID")}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  onPress={() => setSelectedAmount(amount)}>
+                  <Text
+                    style={[
+                      styles.moneyButtonText,
+                      selectedAmount === amount && styles.moneyButtonTextActive,
+                    ]}>
+                    {i === 0 ? "Uang Pas" : amount.toLocaleString("id-ID")}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
-        </View>
-      </ScrollView>
+        </ScrollView>
 
-      <BottomBar
-        itemCount={itemCount}
-        total={totalBayar}
-        buttonText="Selesaikan Transaksi"
-        onPress={onSubmit}
-        formatCurrency={formatCurrency}
-      />
-    </View>
+        <BottomBar
+          itemCount={itemCount}
+          total={totalBayar}
+          buttonText="Selesaikan Transaksi"
+          onPress={onSubmit}
+          formatCurrency={formatCurrency}
+        />
+      </View>
+    </SafeAreaProvider>
   );
 };
 
