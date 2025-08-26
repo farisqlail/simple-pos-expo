@@ -11,7 +11,7 @@ import {
   StyleSheet,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import QuantitySelector from "./QuantitySelector";
 
 interface Option {
@@ -57,7 +57,9 @@ const OptionSection = ({
         <Text style={styles.sectionTitle}>{title}</Text>
         <Text
           style={
-            note.includes("Wajib") ? styles.sectionRequired : styles.sectionOptional
+            note.includes("Wajib")
+              ? styles.sectionRequired
+              : styles.sectionOptional
           }>
           {note}
         </Text>
@@ -81,12 +83,20 @@ const OptionSection = ({
             <View style={styles.optionLeft}>
               {multiple ? (
                 <View
-                  style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
-                  {isSelected && <Ionicons name="checkmark" size={12} color="white" />}
+                  style={[
+                    styles.checkbox,
+                    isSelected && styles.checkboxSelected,
+                  ]}>
+                  {isSelected && (
+                    <Ionicons name="checkmark" size={12} color="white" />
+                  )}
                 </View>
               ) : (
                 <View
-                  style={[styles.radioOuter, isSelected && styles.radioOuterSelected]}>
+                  style={[
+                    styles.radioOuter,
+                    isSelected && styles.radioOuterSelected,
+                  ]}>
                   {isSelected && <View style={styles.radioInner} />}
                 </View>
               )}
@@ -118,7 +128,9 @@ const ProductModification: React.FC<ProductModificationProps> = ({
   const insets = useSafeAreaInsets();
 
   const [selectedSize, setSelectedSize] = useState(sizeOptions[0]?.name || "");
-  const [selectedSugar, setSelectedSugar] = useState(sugarOptions[0]?.name || "");
+  const [selectedSugar, setSelectedSugar] = useState(
+    sugarOptions[0]?.name || ""
+  );
   const [selectedToppings, setSelectedToppings] = useState<string[]>([]);
   const [quantity, setQuantity] = useState(1);
   const [isTakeaway] = useState(true);
@@ -151,103 +163,114 @@ const ProductModification: React.FC<ProductModificationProps> = ({
   if (!isVisible) return null;
 
   return (
-    <Modal
-      visible={isVisible}
-      animationType="slide"
-      presentationStyle="fullScreen"
-      statusBarTranslucent 
-    >
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.headerBack}>
-            <Ionicons name="chevron-back" size={24} color="#000" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Modifikasi Item</Text>
-        </View>
+    <SafeAreaProvider>
+      <Modal
+        visible={isVisible}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        statusBarTranslucent>
+        <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+        <View style={[styles.container, { paddingTop: insets.top }]}>
+          {/* Header */}
+          <View style={styles.header}>
+            <TouchableOpacity onPress={onClose} style={styles.headerBack}>
+              <Ionicons name="chevron-back" size={24} color="#000" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Modifikasi Item</Text>
+          </View>
 
-        <ScrollView style={styles.scrollArea}>
-          {/* Product Info */}
-          <View style={styles.productCard}>
-            <View style={styles.productRow}>
-              <Image source={productImage} style={styles.productImage} resizeMode="cover" />
-              <View style={styles.productInfo}>
-                <Text style={styles.productName}>{productName}</Text>
-                <View style={styles.priceRow}>
-                  <Text style={styles.productPrice}>Rp {productPrice}</Text>
-                  {originalPrice && (
-                    <Text style={styles.originalPrice}>{originalPrice}</Text>
-                  )}
-                  {discount && <Text style={styles.discount}>{discount}</Text>}
-                </View>
-                <View style={styles.takeawayRow}>
-                  <Switch
-                    value={isTakeaway}
-                    onValueChange={() => {}}
-                    trackColor={{ false: "#E5E7EB", true: "#E5E7EB" }}
-                    thumbColor={isTakeaway ? "#4B5563" : "#9CA3AF"}
-                    style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
-                  />
-                  <Text style={styles.takeawayText}>Takeaway</Text>
+          <ScrollView style={styles.scrollArea}>
+            {/* Product Info */}
+            <View style={styles.productCard}>
+              <View style={styles.productRow}>
+                <Image
+                  source={productImage}
+                  style={styles.productImage}
+                  resizeMode="cover"
+                />
+                <View style={styles.productInfo}>
+                  <Text style={styles.productName}>{productName}</Text>
+                  <View style={styles.priceRow}>
+                    <Text style={styles.productPrice}>Rp {productPrice}</Text>
+                    {originalPrice && (
+                      <Text style={styles.originalPrice}>{originalPrice}</Text>
+                    )}
+                    {discount && (
+                      <Text style={styles.discount}>{discount}</Text>
+                    )}
+                  </View>
+                  <View style={styles.takeawayRow}>
+                    <Switch
+                      value={isTakeaway}
+                      onValueChange={() => {}}
+                      trackColor={{ false: "#E5E7EB", true: "#E5E7EB" }}
+                      thumbColor={isTakeaway ? "#4B5563" : "#9CA3AF"}
+                      style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
+                    />
+                    <Text style={styles.takeawayText}>Takeaway</Text>
+                  </View>
                 </View>
               </View>
+              <TouchableOpacity style={styles.notesBox}>
+                <Ionicons name="create-outline" size={16} color="#9CA3AF" />
+                <Text style={styles.notesText}>Catatan</Text>
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity style={styles.notesBox}>
-              <Ionicons name="create-outline" size={16} color="#9CA3AF" />
-              <Text style={styles.notesText}>Catatan</Text>
+
+            {/* Sections */}
+            <OptionSection
+              title="Ukuran Cup"
+              note="- Wajib (Pilih 1)"
+              options={sizeOptions}
+              selected={selectedSize}
+              setSelected={setSelectedSize}
+            />
+            <OptionSection
+              title="Takaran Gula"
+              note="- Wajib (Pilih 1)"
+              options={sugarOptions}
+              selected={selectedSugar}
+              setSelected={setSelectedSugar}
+            />
+            <OptionSection
+              title="Topping"
+              note="- Opsional (Max 3)"
+              options={toppingOptions}
+              selected={selectedToppings}
+              multiple
+              toggleMultiple={toggleTopping}
+            />
+          </ScrollView>
+
+          {/* Footer */}
+          <View
+            style={[
+              styles.footerContainer,
+              { paddingBottom: 16 + insets.bottom },
+            ]}>
+            <View style={styles.flexItem}>
+              <QuantitySelector value={quantity} onChange={setQuantity} />
+            </View>
+            <TouchableOpacity
+              onPress={() => {
+                onSave?.({
+                  size: selectedSize,
+                  sugar: selectedSugar,
+                  toppings: selectedToppings,
+                  quantity,
+                  total: calculateTotal(),
+                });
+                onClose();
+              }}
+              style={[styles.saveButton, styles.flexItem]}
+              activeOpacity={0.8}>
+              <Ionicons name="bag" size={20} color="#FFFFFF" />
+              <Text style={styles.saveButtonText}>Simpan</Text>
             </TouchableOpacity>
           </View>
-
-          {/* Sections */}
-          <OptionSection
-            title="Ukuran Cup"
-            note="- Wajib (Pilih 1)"
-            options={sizeOptions}
-            selected={selectedSize}
-            setSelected={setSelectedSize}
-          />
-          <OptionSection
-            title="Takaran Gula"
-            note="- Wajib (Pilih 1)"
-            options={sugarOptions}
-            selected={selectedSugar}
-            setSelected={setSelectedSugar}
-          />
-          <OptionSection
-            title="Topping"
-            note="- Opsional (Max 3)"
-            options={toppingOptions}
-            selected={selectedToppings}
-            multiple
-            toggleMultiple={toggleTopping}
-          />
-        </ScrollView>
-
-        {/* Footer */}
-        <View style={[styles.footerContainer, { paddingBottom: 16 + insets.bottom }]}>
-          <View style={styles.flexItem}>
-            <QuantitySelector value={quantity} onChange={setQuantity} />
-          </View>
-          <TouchableOpacity
-            onPress={() => {
-              onSave?.({
-                size: selectedSize,
-                sugar: selectedSugar,
-                toppings: selectedToppings,
-                quantity,
-                total: calculateTotal(),
-              });
-              onClose();
-            }}
-            style={[styles.saveButton, styles.flexItem]}
-            activeOpacity={0.8}>
-            <Ionicons name="bag" size={20} color="#FFFFFF" />
-            <Text style={styles.saveButtonText}>Simpan</Text>
-          </TouchableOpacity>
         </View>
-      </View>
-    </Modal>
+      </Modal>
+    </SafeAreaProvider>
   );
 };
 
@@ -333,7 +356,12 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   radioOuterSelected: { borderColor: "#DC2626", backgroundColor: "#DC2626" },
-  radioInner: { width: 8, height: 8, backgroundColor: "white", borderRadius: 4 },
+  radioInner: {
+    width: 8,
+    height: 8,
+    backgroundColor: "white",
+    borderRadius: 4,
+  },
   checkbox: {
     width: 20,
     height: 20,

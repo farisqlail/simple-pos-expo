@@ -10,7 +10,11 @@ import {
   Alert,
   TextInput,
   Modal,
+  ScrollView,
+  StyleSheet,
+  Platform 
 } from "react-native";
+import Constants from 'expo-constants';
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -24,15 +28,15 @@ interface Transaction {
   transaction_id: number;
   transaction_type: string;
   transaction_status: string;
-  nota: string;
-  transaction_date: string;
-  date_process: string;
-  date_done: string;
-  date_paid_received: string;
+  nota: string | null; // bisa null dari API
+  transaction_date: string | null;
+  date_process: string | null;
+  date_done: string | null;
+  date_paid_received: string | null;
   stotal: number;
   gtotal: number;
   payment_id: number;
-  payment_name: string;
+  payment_name: string | null;
   tax: number;
   tax_id: number;
   tax_name: string;
@@ -56,10 +60,10 @@ interface Transaction {
   void_by: string | null;
   void_by_id: number | null;
   hl_takeaway: string;
-  guest_detail: string;
-  cashier_first_name: string;
-  cashier_last_name: string;
-  cashier_position: string;
+  guest_detail: string | null;
+  cashier_first_name: string | null;
+  cashier_last_name: string | null;
+  cashier_position: string | null;
   bukti_bayar: string | null;
 }
 
@@ -75,7 +79,10 @@ interface TransactionResponse {
 }
 
 // Cache untuk menyimpan data transaksi
-const transactionCache = new Map<string, { data: Transaction[], timestamp: number }>();
+const transactionCache = new Map<
+  string,
+  { data: Transaction[]; timestamp: number }
+>();
 const CACHE_DURATION = 5 * 60 * 1000; // 5 menit
 
 const History: React.FC = () => {
@@ -86,7 +93,7 @@ const History: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showDatePicker, setShowDatePicker] = useState(false);
-  
+
   // Pagination states
   const [page, setPage] = useState(1);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -104,13 +111,25 @@ const History: React.FC = () => {
   const locId = location?.loc_id ?? 3365;
 
   // Util functions (memoized)
-  const formatCurrency = useCallback((amount: number) =>
-    `Rp ${amount.toLocaleString("id-ID")}`, []);
+  const formatCurrency = useCallback(
+    (amount: number) => `Rp ${Number(amount || 0).toLocaleString("id-ID")}`,
+    []
+  );
 
   const formatDateForDisplay = useCallback((date: Date) => {
     const months = [
-      "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-      "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+      "Januari",
+      "Februari",
+      "Maret",
+      "April",
+      "Mei",
+      "Juni",
+      "Juli",
+      "Agustus",
+      "September",
+      "Oktober",
+      "November",
+      "Desember",
     ];
     const day = date.getDate();
     const month = months[date.getMonth()];
@@ -118,25 +137,32 @@ const History: React.FC = () => {
     return `${day} ${month} ${year}`;
   }, []);
 
-  const formatDateForAPI = useCallback((date: Date) => 
-    date.toISOString().split("T")[0], []);
+  const formatDateForAPI = useCallback(
+    (date: Date) => date.toISOString().split("T")[0],
+    []
+  );
 
   const getDateRangeText = useCallback(() => {
     if (formatDateForAPI(startDate) === formatDateForAPI(endDate)) {
       return formatDateForDisplay(startDate);
     }
-    return `${formatDateForDisplay(startDate)} - ${formatDateForDisplay(endDate)}`;
+    return `${formatDateForDisplay(startDate)} - ${formatDateForDisplay(
+      endDate
+    )}`;
   }, [startDate, endDate, formatDateForAPI, formatDateForDisplay]);
 
   const dateRange = useMemo(() => getDateRangeText(), [getDateRangeText]);
 
-  const formatDate = useCallback((dateString: string) => {
+  // Formatter tanggal aman
+  const formatDate = useCallback((dateString?: string | null) => {
+    if (!dateString) return "-";
     const date = new Date(dateString);
-    const day = date.getDate().toString().padStart(2, "0");
-    const month = (date.getMonth() + 1).toString().padStart(2, "0");
+    if (Number.isNaN(date.getTime())) return "-";
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
     const year = date.getFullYear();
-    const hours = date.getHours().toString().padStart(2, "0");
-    const minutes = date.getMinutes().toString().padStart(2, "0");
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
     return `${day}/${month}/${year}, ${hours}:${minutes}`;
   }, []);
 
@@ -155,9 +181,12 @@ const History: React.FC = () => {
   }, []);
 
   // Cache key generator
-  const getCacheKey = useCallback((startDate: Date, endDate: Date, page: number) => {
-    return `${formatDateForAPI(startDate)}_${formatDateForAPI(endDate)}_${page}`;
-  }, [formatDateForAPI]);
+  const getCacheKey = useCallback(
+    (start: Date, end: Date, pageNum: number) => {
+      return `${formatDateForAPI(start)}_${formatDateForAPI(end)}_${pageNum}`;
+    },
+    [formatDateForAPI]
+  );
 
   // Check cache validity
   const isValidCache = useCallback((timestamp: number) => {
@@ -165,88 +194,102 @@ const History: React.FC = () => {
   }, []);
 
   // Fetch transaksi dengan optimasi
-  const fetchTransactions = useCallback(async (
-    isRefresh = false, 
-    pageNumber = 1, 
-    isLoadMore = false
-  ) => {
-    if (!ready || !appid || !auth.token) return;
+  const fetchTransactions = useCallback(
+    async (isRefresh = false, pageNumber = 1, isLoadMore = false) => {
+      if (!ready || !appid || !auth.token) return;
 
-    const cacheKey = getCacheKey(startDate, endDate, pageNumber);
-    
-    // Check cache first untuk page pertama
-    if (!isRefresh && pageNumber === 1) {
-      const cached = transactionCache.get(cacheKey);
-      if (cached && isValidCache(cached.timestamp)) {
-        setTransactions(cached.data);
-        setLoading(false);
-        setHasMoreData(cached.data.length >= ITEMS_PER_PAGE);
-        return;
+      const cacheKey = getCacheKey(startDate, endDate, pageNumber);
+
+      // Check cache first untuk page pertama
+      if (!isRefresh && pageNumber === 1) {
+        const cached = transactionCache.get(cacheKey);
+        if (cached && isValidCache(cached.timestamp)) {
+          setTransactions(cached.data);
+          setLoading(false);
+          setHasMoreData(cached.data.length >= ITEMS_PER_PAGE);
+          return;
+        }
       }
-    }
 
-    if (isRefresh) {
-      setRefreshing(true);
-    } else if (isLoadMore) {
-      setLoadingMore(true);
-    } else {
-      setLoading(true);
-    }
-
-    try {
-      // Gunakan tanggal yang dipilih untuk API call
-      const startDateStr = formatDateForAPI(startDate);
-      const endDateStr = formatDateForAPI(endDate);
-      
-      const endpoint = `transaction/get-transaction-list?appid=${appid}&location=${locId}&date_start=${startDateStr}&date_end=${endDateStr}&show_all=no&page=${pageNumber}&limit=${ITEMS_PER_PAGE}`;
-
-      const data: TransactionResponse = await getResource(endpoint, auth.token);
-
-      if (data.status === "success") {
-        const newTransactions = data.data;
-        
-        if (isLoadMore && pageNumber > 1) {
-          setTransactions(prev => [...prev, ...newTransactions]);
-        } else {
-          setTransactions(newTransactions);
-          // Cache data untuk page pertama
-          if (pageNumber === 1) {
-            transactionCache.set(cacheKey, {
-              data: newTransactions,
-              timestamp: Date.now()
-            });
-          }
-        }
-        
-        setHasMoreData(newTransactions.length >= ITEMS_PER_PAGE);
-        
-        if (isLoadMore) {
-          setPage(pageNumber);
-        }
+      if (isRefresh) {
+        setRefreshing(true);
+      } else if (isLoadMore) {
+        setLoadingMore(true);
       } else {
-        Alert.alert("Error", data.message || "Failed to fetch transactions");
-      }
-    } catch (error: any) {
-      console.error("Error fetching transactions:", error);
-
-      let errorMessage = "Failed to fetch transaction data";
-      if (error.status === 401) {
-        errorMessage = "Authentication failed. Please login again.";
-      } else if (error.status === 403) {
-        errorMessage = "Access denied. Check your permissions.";
-      } else if (error.status >= 500) {
-        errorMessage = "Server error. Please try again later.";
-      } else if (error.message) {
-        errorMessage = error.message;
+        setLoading(true);
       }
 
-      Alert.alert("Error", errorMessage);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-      setLoadingMore(false);
-    }
-  }, [ready, appid, auth.token, startDate, endDate, locId, getCacheKey, isValidCache, formatDateForAPI]);
+      try {
+        // Gunakan tanggal yang dipilih untuk API call
+        const startDateStr = formatDateForAPI(startDate);
+        const endDateStr = formatDateForAPI(endDate);
+
+        const endpoint = `transaction/get-transaction-list?appid=${appid}&location=${locId}&date_start=${startDateStr}&date_end=${endDateStr}&show_all=no&page=${pageNumber}&limit=${ITEMS_PER_PAGE}`;
+
+        const data: TransactionResponse = await getResource(
+          endpoint,
+          auth.token
+        );
+
+        if (data.status === "success") {
+          const newTransactions = data.data ?? [];
+
+          if (isLoadMore && pageNumber > 1) {
+            setTransactions((prev) => [...prev, ...newTransactions]);
+          } else {
+            setTransactions(newTransactions);
+            // Cache data untuk page pertama
+            if (pageNumber === 1) {
+              transactionCache.set(cacheKey, {
+                data: newTransactions,
+                timestamp: Date.now(),
+              });
+            }
+          }
+
+          setHasMoreData(newTransactions.length >= ITEMS_PER_PAGE);
+
+          if (isLoadMore) {
+            setPage(pageNumber);
+          } else {
+            setPage(1);
+          }
+        } else {
+          Alert.alert("Error", data.message || "Failed to fetch transactions");
+        }
+      } catch (error: any) {
+        console.error("Error fetching transactions:", error);
+
+        let errorMessage = "Failed to fetch transaction data";
+        if (error?.status === 401) {
+          errorMessage = "Authentication failed. Please login again.";
+        } else if (error?.status === 403) {
+          errorMessage = "Access denied. Check your permissions.";
+        } else if (error?.status >= 500) {
+          errorMessage = "Server error. Please try again later.";
+        } else if (error?.message) {
+          errorMessage = error.message;
+        }
+
+        Alert.alert("Error", errorMessage);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+        setLoadingMore(false);
+      }
+    },
+    [
+      ready,
+      appid,
+      auth.token,
+      startDate,
+      endDate,
+      locId,
+      getCacheKey,
+      isValidCache,
+      formatDateForAPI,
+    ]
+  );
 
   // Load more data
   const loadMoreData = useCallback(() => {
@@ -257,7 +300,7 @@ const History: React.FC = () => {
 
   // Filter pencarian dengan debounce effect
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
-  
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchQuery(searchQuery);
@@ -266,16 +309,23 @@ const History: React.FC = () => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  // null-safe helper untuk filter
+  const safeLower = useCallback(
+    (v?: string | null) => (v ?? "").toLowerCase(),
+    []
+  );
+
   const filteredTransactions = useMemo(() => {
     if (!debouncedSearchQuery.trim()) return transactions;
     const q = debouncedSearchQuery.toLowerCase();
+
     return transactions.filter(
       (t) =>
-        t.nota.toLowerCase().includes(q) ||
-        t.cashier_first_name.toLowerCase().includes(q) ||
-        t.cashier_last_name.toLowerCase().includes(q)
+        safeLower(t.nota).includes(q) ||
+        safeLower(t.cashier_first_name).includes(q) ||
+        safeLower(t.cashier_last_name).includes(q)
     );
-  }, [transactions, debouncedSearchQuery]);
+  }, [transactions, debouncedSearchQuery, safeLower]);
 
   // Load saat mount & ketika tanggal berubah
   useEffect(() => {
@@ -295,8 +345,15 @@ const History: React.FC = () => {
 
   // Date picker handlers
   const handleDatePickerConfirm = useCallback(() => {
-    setStartDate(tempStartDate);
-    setEndDate(tempEndDate);
+    let s = tempStartDate;
+    let e = tempEndDate;
+    if (e < s) {
+      const tmp = s;
+      s = e;
+      e = tmp;
+    }
+    setStartDate(s);
+    setEndDate(e);
     setShowDatePicker(false);
   }, [tempStartDate, tempEndDate]);
 
@@ -308,133 +365,149 @@ const History: React.FC = () => {
 
   // Komponen modal pilih tanggal (optimized)
   const DatePickerModal = React.memo(() => {
-    const years = useMemo(() => 
-      Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 5 + i), 
-    []);
-    
-    const months = useMemo(() => [
-      "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-      "Juli", "Agustus", "September", "Oktober", "November", "Desember",
-    ], []);
+    const years = useMemo(
+      () =>
+        Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 5 + i),
+      []
+    );
 
-    const getDaysInMonth = useCallback((year: number, month: number) =>
-      new Date(year, month + 1, 0).getDate(), []);
+    const months = useMemo(
+      () => [
+        "Januari",
+        "Februari",
+        "Maret",
+        "April",
+        "Mei",
+        "Juni",
+        "Juli",
+        "Agustus",
+        "September",
+        "Oktober",
+        "November",
+        "Desember",
+      ],
+      []
+    );
 
-    const renderDatePicker = useCallback((
-      date: Date,
-      setDate: (d: Date) => void,
-      title: string
-    ) => {
-      const currentYear = date.getFullYear();
-      const currentMonth = date.getMonth();
-      const currentDay = date.getDate();
-      const daysInMonth = getDaysInMonth(currentYear, currentMonth);
-      const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+    const getDaysInMonth = useCallback(
+      (year: number, month: number) => new Date(year, month + 1, 0).getDate(),
+      []
+    );
 
-      return (
-        <View className="mb-6">
-          <Text className="text-lg font-semibold mb-4 text-center">
-            {title}
-          </Text>
+    const renderDatePicker = useCallback(
+      (date: Date, setDate: (d: Date) => void, title: string) => {
+        const currentYear = date.getFullYear();
+        const currentMonth = date.getMonth();
+        const currentDay = date.getDate();
+        const daysInMonth = getDaysInMonth(currentYear, currentMonth);
+        const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
-          {/* Tahun */}
-          <Text className="text-sm font-medium mb-2">Tahun</Text>
-          <FlatList
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            data={years}
-            keyExtractor={(item) => item.toString()}
-            contentContainerStyle={{ paddingHorizontal: 16 }}
-            renderItem={({ item: year }) => (
-              <TouchableOpacity
-                onPress={() =>
-                  setDate(
-                    new Date(
-                      year,
-                      currentMonth,
-                      Math.min(currentDay, getDaysInMonth(year, currentMonth))
+        return (
+          <View className="mb-6">
+            <Text className="text-lg font-semibold mb-4 text-center">
+              {title}
+            </Text>
+
+            {/* Tahun */}
+            <Text className="text-sm font-medium mb-2">Tahun</Text>
+            <FlatList
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              data={years}
+              keyExtractor={(item) => item.toString()}
+              contentContainerStyle={{ paddingHorizontal: 16 }}
+              renderItem={({ item: year }) => (
+                <TouchableOpacity
+                  onPress={() =>
+                    setDate(
+                      new Date(
+                        year,
+                        currentMonth,
+                        Math.min(currentDay, getDaysInMonth(year, currentMonth))
+                      )
                     )
-                  )
-                }
-                className={`px-4 py-2 rounded-lg border mr-2 ${
-                  currentYear === year
-                    ? "bg-red-600 border-red-600"
-                    : "bg-white border-gray-300"
-                }`}>
-                <Text
-                  className={`font-medium ${
-                    currentYear === year ? "text-white" : "text-gray-700"
+                  }
+                  className={`px-4 py-2 rounded-lg border mr-2 ${
+                    currentYear === year
+                      ? "bg-red-600 border-red-600"
+                      : "bg-white border-gray-300"
                   }`}>
-                  {year}
-                </Text>
-              </TouchableOpacity>
-            )}
-          />
+                  <Text
+                    className={`font-medium ${
+                      currentYear === year ? "text-white" : "text-gray-700"
+                    }`}>
+                    {year}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
 
-          {/* Bulan */}
-          <Text className="text-sm font-medium mb-2 mt-4">Bulan</Text>
-          <FlatList
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            data={months}
-            keyExtractor={(item, index) => index.toString()}
-            contentContainerStyle={{ paddingHorizontal: 16 }}
-            renderItem={({ item: month, index }) => (
-              <TouchableOpacity
-                onPress={() =>
-                  setDate(
-                    new Date(
-                      currentYear,
-                      index,
-                      Math.min(currentDay, getDaysInMonth(currentYear, index))
+            {/* Bulan */}
+            <Text className="text-sm font-medium mb-2 mt-4">Bulan</Text>
+            <FlatList
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              data={months}
+              keyExtractor={(item, index) => index.toString()}
+              contentContainerStyle={{ paddingHorizontal: 16 }}
+              renderItem={({ item: month, index }) => (
+                <TouchableOpacity
+                  onPress={() =>
+                    setDate(
+                      new Date(
+                        currentYear,
+                        index,
+                        Math.min(currentDay, getDaysInMonth(currentYear, index))
+                      )
                     )
-                  )
-                }
-                className={`px-3 py-2 rounded-lg border mr-2 ${
-                  currentMonth === index
-                    ? "bg-red-600 border-red-600"
-                    : "bg-white border-gray-300"
-                }`}>
-                <Text
-                  className={`font-medium text-sm ${
-                    currentMonth === index ? "text-white" : "text-gray-700"
+                  }
+                  className={`px-3 py-2 rounded-lg border mr-2 ${
+                    currentMonth === index
+                      ? "bg-red-600 border-red-600"
+                      : "bg-white border-gray-300"
                   }`}>
-                  {month}
-                </Text>
-              </TouchableOpacity>
-            )}
-          />
+                  <Text
+                    className={`font-medium text-sm ${
+                      currentMonth === index ? "text-white" : "text-gray-700"
+                    }`}>
+                    {month}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
 
-          {/* Tanggal */}
-          <Text className="text-sm font-medium mb-2 mt-4">Tanggal</Text>
-          <FlatList
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            data={days}
-            keyExtractor={(item) => item.toString()}
-            contentContainerStyle={{ paddingHorizontal: 16 }}
-            renderItem={({ item: day }) => (
-              <TouchableOpacity
-                onPress={() =>
-                  setDate(new Date(currentYear, currentMonth, day))
-                }
-                className={`px-3 py-2 rounded-lg border min-w-[40px] items-center mr-2 ${
-                  currentDay === day
-                    ? "bg-red-600 border-red-600"
-                    : "bg-white border-gray-300"
-                }`}>
-                <Text
-                  className={`font-medium ${
-                    currentDay === day ? "text-white" : "text-gray-700"
+            {/* Tanggal */}
+            <Text className="text-sm font-medium mb-2 mt-4">Tanggal</Text>
+            <FlatList
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              data={days}
+              keyExtractor={(item) => item.toString()}
+              contentContainerStyle={{ paddingHorizontal: 16 }}
+              renderItem={({ item: day }) => (
+                <TouchableOpacity
+                  onPress={() =>
+                    setDate(new Date(currentYear, currentMonth, day))
+                  }
+                  className={`px-3 py-2 rounded-lg border min-w-[40px] items-center mr-2 ${
+                    currentDay === day
+                      ? "bg-red-600 border-red-600"
+                      : "bg-white border-gray-300"
                   }`}>
-                  {day}
-                </Text>
-              </TouchableOpacity>
-            )}
-          />
-        </View>
-      );
-    }, [getDaysInMonth, months, years]);
+                  <Text
+                    className={`font-medium ${
+                      currentDay === day ? "text-white" : "text-gray-700"
+                    }`}>
+                    {day}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        );
+      },
+      [getDaysInMonth, months, years]
+    );
 
     return (
       <Modal visible={showDatePicker} transparent animationType="slide">
@@ -447,18 +520,17 @@ const History: React.FC = () => {
               </TouchableOpacity>
             </View>
 
-            <FlatList
-              data={[1]} // Dummy data to use FlatList
-              keyExtractor={() => "date-picker"}
+            {/* Ganti FlatList pembungkus -> ScrollView untuk hindari nested VirtualizedList crash */}
+            <ScrollView
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ padding: 16 }}
-              renderItem={() => (
-                <>
-                  {renderDatePicker(tempStartDate, setTempStartDate, "Tanggal Mulai")}
-                  {renderDatePicker(tempEndDate, setTempEndDate, "Tanggal Selesai")}
-                </>
+              contentContainerStyle={{ padding: 16 }}>
+              {renderDatePicker(
+                tempStartDate,
+                setTempStartDate,
+                "Tanggal Mulai"
               )}
-            />
+              {renderDatePicker(tempEndDate, setTempEndDate, "Tanggal Selesai")}
+            </ScrollView>
 
             <View className="p-4 border-t border-gray-200 flex-row gap-3">
               <TouchableOpacity
@@ -479,76 +551,78 @@ const History: React.FC = () => {
   });
 
   // Transaction item component (memoized untuk performa)
-  const TransactionItem = React.memo(({ transaction }: { transaction: Transaction }) => {
-    const statusInfo = getStatusInfo(transaction);
+  const TransactionItem = React.memo(
+    ({ transaction }: { transaction: Transaction }) => {
+      const statusInfo = getStatusInfo(transaction);
 
-    return (
-      <View className="bg-white mx-4 mb-3 rounded-lg border border-gray-200 overflow-hidden">
-        {/* Header */}
-        <View className="px-4 py-3 border-b border-gray-100">
-          <View className="flex-row justify-between items-start">
-            <View className="flex-1">
-              <Text className="text-gray-500 text-sm">
-                {formatDate(transaction.transaction_date)}
-              </Text>
-              <Text className="text-gray-900 font-semibold mt-1">
-                {transaction.nota}
-              </Text>
-            </View>
-            <View
-              className="px-3 py-1 rounded-full"
-              style={{ backgroundColor: statusInfo.bgColor }}>
-              <Text
-                className="text-sm font-semibold"
-                style={{ color: statusInfo.color }}>
-                {statusInfo.text}
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Content */}
-        <View className="px-4 py-3">
-          <View className="flex-row justify-between items-center">
-            <View className="flex-1">
-              <Text className="text-gray-900 font-bold text-lg">
-                {formatCurrency(transaction.gtotal)}
-              </Text>
-              <Text className="text-gray-500 text-sm mt-1">
-                #{transaction.nota}
-              </Text>
-            </View>
-
-            <View className="items-end">
-              <Text className="text-gray-600 text-sm">
-                {transaction.payment_name}
-              </Text>
-              <Text className="text-gray-400 text-xs mt-1">
-                {transaction.cashier_first_name} {transaction.cashier_last_name}
-              </Text>
+      return (
+        <View className="bg-white mx-4 mb-3 rounded-lg border border-gray-200 overflow-hidden">
+          {/* Header */}
+          <View className="px-4 py-3 border-b border-gray-100">
+            <View className="flex-row justify-between items-start">
+              <View className="flex-1">
+                <Text className="text-gray-500 text-sm">
+                  {formatDate(transaction.transaction_date)}
+                </Text>
+                <Text className="text-gray-900 font-semibold mt-1">
+                  {transaction.nota ?? "-"}
+                </Text>
+              </View>
+              <View
+                className="px-3 py-1 rounded-full"
+                style={{ backgroundColor: statusInfo.bgColor }}>
+                <Text
+                  className="text-sm font-semibold"
+                  style={{ color: statusInfo.color }}>
+                  {statusInfo.text}
+                </Text>
+              </View>
             </View>
           </View>
 
-          {transaction.void_status === "void" && transaction.void_reason && (
-            <View className="mt-3 pt-3 border-t border-gray-100">
-              <Text className="text-red-600 text-sm">
-                Alasan void: {transaction.void_reason}
-              </Text>
+          {/* Content */}
+          <View className="px-4 py-3">
+            <View className="flex-row justify-between items-center">
+              <View className="flex-1">
+                <Text className="text-gray-900 font-bold text-lg">
+                  {formatCurrency(transaction.gtotal)}
+                </Text>
+                <Text className="text-gray-500 text-sm mt-1">
+                  #{transaction.nota ?? "-"}
+                </Text>
+              </View>
+
+              <View className="items-end">
+                <Text className="text-gray-600 text-sm">
+                  {transaction.payment_name ?? "-"}
+                </Text>
+                <Text className="text-gray-400 text-xs mt-1">
+                  {(transaction.cashier_first_name ?? "").trim()}{" "}
+                  {(transaction.cashier_last_name ?? "").trim()}
+                </Text>
+              </View>
             </View>
-          )}
+
+            {transaction.void_status === "void" && transaction.void_reason && (
+              <View className="mt-3 pt-3 border-t border-gray-100">
+                <Text className="text-red-600 text-sm">
+                  Alasan void: {transaction.void_reason}
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
-      </View>
-    );
-  });
+      );
+    }
+  );
 
-  TransactionItem.displayName = 'TransactionItem';
-
-  DatePickerModal.displayName = 'DatePickerModal';
+  TransactionItem.displayName = "TransactionItem";
+  DatePickerModal.displayName = "DatePickerModal";
 
   // Footer component untuk loading more
   const renderFooter = useCallback(() => {
     if (!loadingMore) return null;
-    
+
     return (
       <View className="py-4">
         <ActivityIndicator size="small" color="#DC2626" />
@@ -560,14 +634,17 @@ const History: React.FC = () => {
   }, [loadingMore]);
 
   // Empty state component
-  const renderEmptyComponent = useCallback(() => (
-    <View className="flex-1 justify-center items-center py-20">
-      <Ionicons name="document-text-outline" size={64} color="#D1D5DB" />
-      <Text className="text-gray-500 mt-4 text-center">
-        Tidak ada transaksi ditemukan
-      </Text>
-    </View>
-  ), []);
+  const renderEmptyComponent = useCallback(
+    () => (
+      <View className="flex-1 justify-center items-center py-20">
+        <Ionicons name="document-text-outline" size={64} color="#D1D5DB" />
+        <Text className="text-gray-500 mt-4 text-center">
+          Tidak ada transaksi ditemukan
+        </Text>
+      </View>
+    ),
+    []
+  );
 
   return (
     <SafeAreaProvider>
@@ -613,7 +690,9 @@ const History: React.FC = () => {
         ) : (
           <FlatList
             data={filteredTransactions}
-            keyExtractor={(item) => `${item.transaction_id}-${item.nota}`}
+            keyExtractor={(item) =>
+              `${item.transaction_id}-${item.nota ?? "nonota"}`
+            }
             renderItem={({ item }) => <TransactionItem transaction={item} />}
             contentContainerStyle={{ paddingTop: 8, paddingBottom: 24 }}
             showsVerticalScrollIndicator={false}

@@ -1,5 +1,5 @@
 // components/ui/BottomNav.tsx
-import React, { memo } from "react";
+import React, { memo, useCallback } from "react";
 import { View, Text, TouchableOpacity, ViewStyle, StyleProp } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -16,10 +16,61 @@ export interface BottomNavProps {
   backgroundColor?: string;
   activeColor?: string;
   inactiveColor?: string;
-  style?: StyleProp<ViewStyle>; // <- agar bisa array/merge
+  style?: StyleProp<ViewStyle>;
 }
 
-const BottomNav: React.FC<BottomNavProps> = ({
+const NavButton = memo<{
+  item: NavItem;
+  isActive: boolean;
+  activeColor: string;
+  inactiveColor: string;
+}>(({ item, isActive, activeColor, inactiveColor }) => {
+  const itemColor = isActive ? activeColor : inactiveColor;
+  const handlePress = useCallback(() => {
+    item.onPress();
+  }, [item.onPress]);
+
+  return (
+    <TouchableOpacity
+      key={item.id}
+      onPress={handlePress}
+      style={{
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: 8,
+      }}
+      activeOpacity={0.7}
+    >
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          paddingHorizontal: 16,
+          paddingVertical: 8,
+          borderRadius: 10,
+          backgroundColor: isActive ? `${activeColor}15` : "transparent",
+        }}
+      >
+        <Ionicons name={item.icon} size={20} color={itemColor} />
+        <Text
+          style={{
+            marginLeft: 8,
+            fontSize: 14,
+            fontWeight: isActive ? "600" : "400",
+            color: itemColor,
+          }}
+        >
+          {item.label}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+});
+
+NavButton.displayName = 'NavButton';
+
+const BottomNav: React.FC<BottomNavProps> = memo(({
   items,
   activeId,
   backgroundColor = "#ffffff",
@@ -42,54 +93,24 @@ const BottomNav: React.FC<BottomNavProps> = ({
           shadowOpacity: 0.1,
           shadowRadius: 3.84,
           elevation: 5,
-          paddingBottom: 20
+          paddingBottom: 30,
         },
         style,
       ]}
     >
-      {items.map((item) => {
-        const isActive = activeId === item.id;
-        const itemColor = isActive ? activeColor : inactiveColor;
-
-        return (
-          <TouchableOpacity
-            key={item.id}
-            onPress={item.onPress}
-            style={{
-              flex: 1,
-              alignItems: "center",
-              justifyContent: "center",
-              paddingVertical: 8,
-            }}
-            activeOpacity={0.7}
-          >
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                paddingHorizontal: 16,
-                paddingVertical: 8,
-                borderRadius: 8, // pengganti className="rounded-lg"
-                backgroundColor: isActive ? `${activeColor}15` : "transparent",
-              }}
-            >
-              <Ionicons name={item.icon} size={20} color={itemColor} />
-              <Text
-                style={{
-                  marginLeft: 8,
-                  fontSize: 14,
-                  fontWeight: isActive ? "600" : "400",
-                  color: itemColor,
-                }}
-              >
-                {item.label}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        );
-      })}
+      {items.map((item) => (
+        <NavButton
+          key={item.id}
+          item={item}
+          isActive={activeId === item.id}
+          activeColor={activeColor}
+          inactiveColor={inactiveColor}
+        />
+      ))}
     </View>
   );
-};
+});
 
-export default memo(BottomNav);
+BottomNav.displayName = 'BottomNav';
+
+export default BottomNav;

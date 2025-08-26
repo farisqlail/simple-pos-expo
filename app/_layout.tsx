@@ -6,12 +6,18 @@ import {
   DarkTheme,
   DefaultTheme,
 } from "@react-navigation/native";
+import {
+  Platform,
+  StyleSheet,
+} from "react-native";
+import Constants from "expo-constants";
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
 import { useColorScheme } from "@/hooks/useColorScheme";
 
 import "react-native-reanimated";
 import "../global.css";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -26,18 +32,34 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      {/* <Stack initialRouteName="(tabs)"> */}
-      <Stack>
-        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        <Stack.Screen name="(auth)/locations/index" options={{ headerShown: false }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="checkout/index" options={{ headerShown: false }} />
-        <Stack.Screen name="receipt/index" options={{ headerShown: false }} />
-        {/* <Stack.Screen name="history/index" options={{ headerShown: false }} /> */}
+      <SafeAreaProvider style={styles.container}>
+        {/* <Stack initialRouteName="(tabs)"> */}
+        <Stack>
+          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="(auth)/locations/index"
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="checkout/index"
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen name="receipt/index" options={{ headerShown: false }} />
+          {/* <Stack.Screen name="history/index" options={{ headerShown: false }} /> */}
 
-        <Stack.Screen name="+not-found" />
-      </Stack>
+          <Stack.Screen name="+not-found" />
+        </Stack>
+      </SafeAreaProvider>
       <StatusBar style="auto" />
     </ThemeProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    paddingTop: Platform.OS === "android" ? Constants.statusBarHeight : 0,
+    backgroundColor: "#B81D1D",
+  },
+});

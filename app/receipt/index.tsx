@@ -9,7 +9,9 @@ import {
   Image,
   ActivityIndicator,
   Alert,
+  Platform,
 } from "react-native";
+import Constants from "expo-constants";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { useFocusEffect, useRouter } from "expo-router";
@@ -353,7 +355,7 @@ export default function ReceiptScreen() {
 
   return (
     <SafeAreaProvider>
-      <View style={styles.container}>
+      <View>
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.successIcon}>
             <Ionicons name="checkmark-circle" size={70} color="#4CAF50" />
@@ -546,7 +548,6 @@ export default function ReceiptScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F9F9F9" },
   scrollContent: { padding: 16, paddingBottom: 100 },
   successIcon: { alignItems: "center", marginTop: 50 },
   successText: {

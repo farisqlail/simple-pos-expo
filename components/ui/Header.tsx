@@ -39,7 +39,7 @@ const Header: React.FC<HeaderProps> = ({
   return (
     <View
       className={`flex-row items-center gap-2 ${backgroundColor}`}
-      style={{ paddingTop: 50, paddingBottom: 20, paddingLeft: 20 }}>
+      style={{ paddingTop: 20, paddingBottom: 20, paddingLeft: 20 }}>
       <View className="w-10 justify-center items-start">
         {showBackButton && (
           <TouchableOpacity

@@ -6,7 +6,10 @@ import {
   View,
   Text,
   ActivityIndicator,
+  Platform,
+  StyleSheet,
 } from "react-native";
+import Constants from "expo-constants";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useCartStore } from "@/lib/store/useCartStore";
@@ -337,12 +340,11 @@ const TransactionScreen = () => {
 
   return (
     <SafeAreaProvider>
+      <Header title="Transaksi Baru" showBackButton={false} />
       <ScrollView
         className="bg-gray-100 flex-1"
         onScroll={handleScroll}
         scrollEventThrottle={400}>
-        <Header title="Transaksi Baru" showBackButton={false} />
-
         <View className="p-4">
           <Input
             placeholder="Cari Produk...."

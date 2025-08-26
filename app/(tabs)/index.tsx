@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Image,
   Modal,
@@ -11,12 +11,15 @@ import {
   Text,
   TouchableOpacity,
   View,
+  useWindowDimensions,
+  StyleSheet,
 } from "react-native";
+import Constants from "expo-constants";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as ScreenOrientation from "expo-screen-orientation";
 
 import { STORAGE_KEYS } from "@/lib/storage/keys";
-
 import { useBootstrapCatalog } from "@/hooks/useBootstrapCatalog";
 import { useFavouriteProducts } from "@/hooks/useFavouriteProducts";
 import { useStoredAuth } from "@/hooks/useStoredAuth";
@@ -32,6 +35,19 @@ export default function Index() {
   const [lastSynced, setLastSynced] = useState<number | null>(null);
 
   const LOGIN_ROUTE = "/(auth)";
+
+  const { width, height } = useWindowDimensions();
+  const isLandscape = width > height;
+
+  // Lock orientasi default untuk screen ini
+  useEffect(() => {
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.DEFAULT);
+    return () => {
+      ScreenOrientation.lockAsync(
+        ScreenOrientation.OrientationLock.PORTRAIT_UP
+      );
+    };
+  }, []);
 
   const { auth, location, ready } = useStoredAuth();
   const firstName = auth.user?.first_name ?? "";
@@ -79,25 +95,38 @@ export default function Index() {
   };
 
   const statusBarH =
-    Platform.OS === "android" ? (StatusBar.currentHeight ?? 0) : 0;
+    Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0;
+
+  // Dimensi adaptif
+  const horizontalPad = Math.max(16, Math.round(width * 0.04));
+  const floatingTop = isLandscape ? 96 : 140;
+  const headerPaddingBottom = isLandscape ? 28 : 48;
 
   return (
     <SafeAreaProvider>
-      <SafeAreaView style={{ flex: 0, backgroundColor: "#B81D1D" }} />
-      <SafeAreaView style={{ flex: 1, backgroundColor: "#F3F4F6" }}>
-        {/* Header */}
+      {/* Safe area top iOS merah */}
+      <SafeAreaView style={{ flex: 1 }}>
+        {/* Header merah */}
         <View
           style={{
             backgroundColor: "#B81D1D",
-            paddingTop: 20,
             position: "relative",
-            paddingBottom: 48,
-          }}
-        >
-          <View className="px-4 py-3 flex-row items-center justify-between">
+            paddingBottom: headerPaddingBottom,
+          }}>
+          <View
+            style={{
+              paddingHorizontal: horizontalPad,
+              paddingVertical: 12,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}>
             <Image
               source={require("@/assets/images/logo.png")}
-              style={{ width: 150, height: 90 }}
+              style={{
+                width: isLandscape ? 130 : 150,
+                height: isLandscape ? 72 : 90,
+              }}
               resizeMode="contain"
               accessibilityIgnoresInvertColors
               accessible
@@ -105,12 +134,15 @@ export default function Index() {
               accessibilityLabel="Logo"
             />
             <TouchableOpacity
-              className="p-2 bg-red-500/95 rounded-xl"
+              style={{
+                padding: 8,
+                backgroundColor: "rgba(239,68,68,0.95)",
+                borderRadius: 12,
+              }}
               onPress={() => setMenuOpen(true)}
               activeOpacity={0.85}
               accessibilityRole="button"
-              accessibilityLabel="Buka menu"
-            >
+              accessibilityLabel="Buka menu">
               <MenuIcon width={20} height={20} color="white" />
             </TouchableOpacity>
           </View>
@@ -121,63 +153,105 @@ export default function Index() {
             }
             title={locationName || "Nama Location"}
             subtitle={firstName || ""}
-            top={140}
-            horizontal={16}
+            top={floatingTop}
+            horizontal={horizontalPad}
           />
         </View>
 
+        {/* Konten scroll */}
         <ScrollView
-          className="bg-[#F3F4F6]"
-          contentContainerStyle={{ paddingBottom: 28 }}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Ringkasan Hari Ini (dummy) */}
-          <View className="px-4 mt-10">
-            <View className="flex-row items-center justify-between mb-1">
-              <Text className="text-[16px] font-semibold text-gray-900">
+          style={{ backgroundColor: "#F3F4F6" }}
+          contentContainerStyle={{
+            paddingBottom: 28,
+          }}
+          showsVerticalScrollIndicator={false}>
+          <View
+            style={{
+              paddingHorizontal: horizontalPad,
+              marginTop: isLandscape ? 64 : 60,
+            }}>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 4,
+              }}>
+              <Text
+                style={{
+                  fontSize: isLandscape ? 15 : 16,
+                  fontWeight: "600",
+                  color: "#111827",
+                }}>
                 Ringkasan Hari Ini
               </Text>
               {lastSynced ? (
-                <Text className="text-[11px] text-gray-500">
+                <Text style={{ fontSize: 11, color: "#6B7280" }}>
                   Terakhir sinkron: {new Date(lastSynced).toLocaleString()}
                 </Text>
               ) : null}
             </View>
 
-            <View className="flex-row">
+            {/* Kartu ringkasan */}
+            <View
+              style={{
+                flexDirection: isLandscape ? "column" : "row",
+                gap: 12,
+              }}>
               <View
-                className="flex-1 bg-white rounded-xl px-4 py-3 mr-3 justify-center"
                 style={{
-                  minHeight: 82,
+                  flex: 1,
+                  backgroundColor: "white",
+                  borderRadius: 12,
+                  paddingHorizontal: 16,
+                  paddingVertical: 12,
+                  justifyContent: "center",
+                  minHeight: isLandscape ? 74 : 82,
                   shadowColor: "#000",
                   shadowOffset: { width: 0, height: 3 },
                   shadowOpacity: 0.05,
                   shadowRadius: 8,
                   elevation: 2,
-                }}
-              >
-                <Text className="text-gray-500 text-[12px] mb-1">
+                }}>
+                <Text
+                  style={{ color: "#6B7280", fontSize: 12, marginBottom: 4 }}>
                   Total Penjualan
                 </Text>
-                <Text className="text-[18px] font-semibold text-gray-900">
+                <Text
+                  style={{
+                    color: "#111827",
+                    fontSize: isLandscape ? 17 : 18,
+                    fontWeight: "600",
+                  }}>
                   Rp 12.000
                 </Text>
               </View>
+
               <View
-                className="flex-1 bg-white rounded-xl px-4 py-3 justify-center"
                 style={{
-                  minHeight: 82,
+                  flex: 1,
+                  backgroundColor: "white",
+                  borderRadius: 12,
+                  paddingHorizontal: 16,
+                  paddingVertical: 12,
+                  justifyContent: "center",
+                  minHeight: isLandscape ? 74 : 82,
                   shadowColor: "#000",
                   shadowOffset: { width: 0, height: 3 },
                   shadowOpacity: 0.05,
                   shadowRadius: 8,
                   elevation: 2,
-                }}
-              >
-                <Text className="text-gray-500 text-[12px] mb-1">
+                }}>
+                <Text
+                  style={{ color: "#6B7280", fontSize: 12, marginBottom: 4 }}>
                   Total Transaksi
                 </Text>
-                <Text className="text-[18px] font-semibold text-gray-900">
+                <Text
+                  style={{
+                    color: "#111827",
+                    fontSize: isLandscape ? 17 : 18,
+                    fontWeight: "600",
+                  }}>
                   Rp 12.000
                 </Text>
               </View>
@@ -185,7 +259,7 @@ export default function Index() {
           </View>
 
           {/* Produk Paling Laris */}
-          <View className="px-4 mt-4">
+          <View style={{ paddingHorizontal: horizontalPad, marginTop: 16 }}>
             <ProductListCard
               loading={!ready || loading}
               error={error}
@@ -193,17 +267,16 @@ export default function Index() {
             />
           </View>
 
-          <View className="h-8" />
+          <View style={{ height: 32 }} />
         </ScrollView>
       </SafeAreaView>
 
-      {/* Dropdown */}
+      {/* Dropdown menu */}
       <Modal
         transparent
         visible={menuOpen}
         onRequestClose={() => setMenuOpen(false)}
-        animationType="fade"
-      >
+        animationType="fade">
         <Pressable
           onPress={() => setMenuOpen(false)}
           style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
@@ -224,32 +297,28 @@ export default function Index() {
             shadowOpacity: 0.12,
             shadowRadius: 12,
             elevation: 12,
-          }}
-        >
+          }}>
           <TouchableOpacity
-            className="px-4 py-3"
+            style={{ paddingHorizontal: 16, paddingVertical: 12 }}
             onPress={onSync}
             disabled={!canRun}
             accessibilityRole="button"
-            accessibilityLabel="Sinkronkan data"
-          >
+            accessibilityLabel="Sinkronkan data">
             <Text
               style={{
                 color: canRun ? "black" : "#9CA3AF",
                 fontWeight: "600",
-              }}
-            >
+              }}>
               Sync Data
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={onLogout}
-            className="px-4 py-3"
+            style={{ paddingHorizontal: 16, paddingVertical: 12 }}
             activeOpacity={0.85}
             accessibilityRole="button"
-            accessibilityLabel="Keluar akun"
-          >
-            <Text className="text-red-600 font-medium">Logout</Text>
+            accessibilityLabel="Keluar akun">
+            <Text style={{ color: "#DC2626", fontWeight: "600" }}>Logout</Text>
           </TouchableOpacity>
         </View>
       </Modal>
