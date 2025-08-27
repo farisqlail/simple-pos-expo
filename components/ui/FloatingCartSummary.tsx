@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Modal,
   ScrollView,
+  Alert,
 } from "react-native";
 import { useCartStore, CartItem } from "@/lib/store/useCartStore";
 
@@ -56,6 +57,25 @@ const ItemCard = ({
   const unitTotal = item.unitBasePrice + item.unitAddonsPrice;
   const hasToppings = !!item.note?.toppings?.length;
 
+  // Fungsi untuk konfirmasi hapus item
+  const handleRemove = () => {
+    Alert.alert(
+      "Hapus Item",
+      `Apakah Anda yakin ingin menghapus "${item.name}" dari keranjang?`,
+      [
+        {
+          text: "Batal",
+          style: "cancel",
+        },
+        {
+          text: "Hapus",
+          style: "destructive",
+          onPress: onRemove,
+        },
+      ]
+    );
+  };
+
   return (
     <View style={styles.card}>
       <View style={styles.cardHead}>
@@ -97,7 +117,7 @@ const ItemCard = ({
 
       <View style={styles.actionsRow}>
         <View style={{ flexDirection: "row", gap: 18 }}>
-          <TouchableOpacity onPress={onRemove} activeOpacity={0.8}>
+          <TouchableOpacity onPress={handleRemove} activeOpacity={0.8}>
             <Text style={styles.linkDanger}>Hapus</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={onEdit} activeOpacity={0.8}>
@@ -139,6 +159,25 @@ const FloatingCartSummary: React.FC<Props> = ({
     }
     return { itemCount: count, subtotal: sub };
   }, [items]);
+
+  // Fungsi untuk menghapus item dari cart summary (bagian atas modal)
+  const handleRemoveFromSummary = (itemId: string, itemName: string) => {
+    Alert.alert(
+      "Hapus Item",
+      `Apakah Anda yakin ingin menghapus "${itemName}" dari keranjang?`,
+      [
+        {
+          text: "Batal",
+          style: "cancel",
+        },
+        {
+          text: "Hapus",
+          style: "destructive",
+          onPress: () => removeItem(itemId),
+        },
+      ]
+    );
+  };
 
   return (
     <>
@@ -200,6 +239,14 @@ const FloatingCartSummary: React.FC<Props> = ({
                         onPress={() => incItem(item.id)}>
                         <Text style={styles.summaryQtyText}>+</Text>
                       </TouchableOpacity>
+                      {/* Tombol hapus di bagian summary */}
+                      <TouchableOpacity
+                        style={styles.summaryRemoveBtn}
+                        onPress={() =>
+                          handleRemoveFromSummary(item.id, item.name)
+                        }>
+                        <Text style={styles.summaryRemoveText}>×</Text>
+                      </TouchableOpacity>
                     </View>
                   </View>
                 ))}
@@ -252,12 +299,9 @@ const FloatingCartSummary: React.FC<Props> = ({
               <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
                 <TouchableOpacity
                   style={styles.footerCancel}
-                  onPress={() => {
-                    setOpen(false);
-                    onCancel();
-                  }}>
+                  onPress={() => setOpen(false)}>
                   <Text style={{ color: RED, fontWeight: "700" }}>
-                    Batalkan
+                    Tutup
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -372,6 +416,22 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#111827",
     fontSize: 14,
+  },
+  summaryRemoveBtn: {
+    backgroundColor: "#FEE2E2",
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    minWidth: 28,
+    alignItems: "center",
+  },
+  summaryRemoveText: {
+    color: RED,
+    fontWeight: "700",
+    fontSize: 16,
+    lineHeight: 16,
   },
 
   sheetHeader: {

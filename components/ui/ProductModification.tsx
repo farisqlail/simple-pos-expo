@@ -9,9 +9,13 @@ import {
   StatusBar,
   Switch,
   StyleSheet,
+  TextInput,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  SafeAreaProvider,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import QuantitySelector from "./QuantitySelector";
 
 interface Option {
@@ -133,7 +137,9 @@ const ProductModification: React.FC<ProductModificationProps> = ({
   );
   const [selectedToppings, setSelectedToppings] = useState<string[]>([]);
   const [quantity, setQuantity] = useState(1);
-  const [isTakeaway] = useState(true);
+  const [isTakeaway, setIsTakeaway] = useState(false);
+  const [notes, setNotes] = useState("");
+  const [showNotesInput, setShowNotesInput] = useState(false);
 
   const toggleTopping = (topping: string) => {
     setSelectedToppings((prev) =>
@@ -158,6 +164,21 @@ const ProductModification: React.FC<ProductModificationProps> = ({
     );
 
     return total * quantity;
+  };
+
+  const handleSave = () => {
+    const modifications = {
+      size: selectedSize,
+      sugar: selectedSugar,
+      toppings: selectedToppings,
+      quantity,
+      total: calculateTotal(),
+      takeaway: isTakeaway,
+      notes: notes.trim(),
+    };
+
+    onSave?.(modifications);
+    onClose();
   };
 
   if (!isVisible) return null;
@@ -199,22 +220,95 @@ const ProductModification: React.FC<ProductModificationProps> = ({
                       <Text style={styles.discount}>{discount}</Text>
                     )}
                   </View>
-                  <View style={styles.takeawayRow}>
-                    <Switch
-                      value={isTakeaway}
-                      onValueChange={() => {}}
-                      trackColor={{ false: "#E5E7EB", true: "#E5E7EB" }}
-                      thumbColor={isTakeaway ? "#4B5563" : "#9CA3AF"}
-                      style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
-                    />
-                    <Text style={styles.takeawayText}>Takeaway</Text>
+
+                  {/* Enhanced Takeaway/Dine In Section */}
+                  <View style={styles.serviceTypeContainer}>
+                    <Text style={styles.serviceTypeTitle}>Jenis Pesanan</Text>
+                    <View style={styles.serviceTypeOptions}>
+                      <TouchableOpacity
+                        style={[
+                          styles.serviceTypeButton,
+                          !isTakeaway && styles.serviceTypeButtonActive,
+                        ]}
+                        onPress={() => setIsTakeaway(false)}>
+                        <Ionicons
+                          name="restaurant-outline"
+                          size={16}
+                          color={!isTakeaway ? "#DC2626" : "#6B7280"}
+                        />
+                        <Text
+                          style={[
+                            styles.serviceTypeText,
+                            !isTakeaway && styles.serviceTypeTextActive,
+                          ]}>
+                          Dine In
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.serviceTypeButton,
+                          isTakeaway && styles.serviceTypeButtonActive,
+                        ]}
+                        onPress={() => setIsTakeaway(true)}>
+                        <Ionicons
+                          name="bag-outline"
+                          size={16}
+                          color={isTakeaway ? "#DC2626" : "#6B7280"}
+                        />
+                        <Text
+                          style={[
+                            styles.serviceTypeText,
+                            isTakeaway && styles.serviceTypeTextActive,
+                          ]}>
+                          Takeaway
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
               </View>
-              <TouchableOpacity style={styles.notesBox}>
+
+              {/* Notes Section */}
+              <TouchableOpacity
+                style={styles.notesBox}
+                onPress={() => setShowNotesInput(!showNotesInput)}>
                 <Ionicons name="create-outline" size={16} color="#9CA3AF" />
-                <Text style={styles.notesText}>Catatan</Text>
+                <Text style={styles.notesText}>
+                  {notes ? notes : "Tambahkan catatan khusus"}
+                </Text>
+                <Ionicons
+                  name={showNotesInput ? "chevron-up" : "chevron-down"}
+                  size={16}
+                  color="#9CA3AF"
+                />
               </TouchableOpacity>
+
+              {showNotesInput && (
+                <View style={styles.notesInputContainer}>
+                  <TextInput
+                    style={styles.notesInput}
+                    placeholder="Contoh: Pedas level 3, tanpa bawang, dll."
+                    value={notes}
+                    onChangeText={setNotes}
+                    multiline
+                    numberOfLines={3}
+                    textAlignVertical="top"
+                  />
+                  <View style={styles.notesActions}>
+                    <TouchableOpacity
+                      style={styles.notesClearButton}
+                      onPress={() => setNotes("")}>
+                      <Text style={styles.notesClearText}>Hapus</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.notesOkButton}
+                      onPress={() => setShowNotesInput(false)}>
+                      <Text style={styles.notesOkText}>OK</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
             </View>
 
             {/* Sections */}
@@ -252,16 +346,7 @@ const ProductModification: React.FC<ProductModificationProps> = ({
               <QuantitySelector value={quantity} onChange={setQuantity} />
             </View>
             <TouchableOpacity
-              onPress={() => {
-                onSave?.({
-                  size: selectedSize,
-                  sugar: selectedSugar,
-                  toppings: selectedToppings,
-                  quantity,
-                  total: calculateTotal(),
-                });
-                onClose();
-              }}
+              onPress={handleSave}
               style={[styles.saveButton, styles.flexItem]}
               activeOpacity={0.8}>
               <Ionicons name="bag" size={20} color="#FFFFFF" />
@@ -293,10 +378,10 @@ const styles = StyleSheet.create({
     padding: 16,
     margin: 16,
   },
-  productRow: { flexDirection: "row", alignItems: "center" },
+  productRow: { flexDirection: "row", alignItems: "flex-start" },
   productImage: { width: 80, height: 80, borderRadius: 6 },
   productInfo: { flex: 1, marginLeft: 12 },
-  productName: { fontSize: 20, fontWeight: "600", color: "#1F2937" },
+  productName: { fontSize: 18, fontWeight: "600", color: "#1F2937" },
   priceRow: { flexDirection: "row", alignItems: "center", marginTop: 2 },
   productPrice: { fontSize: 14, fontWeight: "600", color: "#1F2937" },
   originalPrice: {
@@ -306,8 +391,47 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   discount: { fontSize: 14, color: "#DC2626", marginLeft: 8 },
-  takeawayRow: { flexDirection: "row", alignItems: "center", marginTop: 4 },
-  takeawayText: { color: "#6B7280", fontSize: 12 },
+
+  // Service Type Section
+  serviceTypeContainer: { marginTop: 12 },
+  serviceTypeTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+    marginBottom: 8,
+  },
+  serviceTypeOptions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  serviceTypeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#FFFFFF",
+    flex: 1,
+    justifyContent: "center",
+  },
+  serviceTypeButtonActive: {
+    borderColor: "#DC2626",
+    backgroundColor: "#FEE2E2",
+  },
+  serviceTypeText: {
+    marginLeft: 6,
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#6B7280",
+  },
+  serviceTypeTextActive: {
+    color: "#DC2626",
+    fontWeight: "600",
+  },
+
+  // Notes Section
   notesBox: {
     flexDirection: "row",
     alignItems: "center",
@@ -315,10 +439,56 @@ const styles = StyleSheet.create({
     borderColor: "#E5E7EB",
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 12,
     marginTop: 16,
   },
-  notesText: { marginLeft: 8, flex: 1, fontSize: 14, color: "#9CA3AF" },
+  notesText: {
+    marginLeft: 8,
+    flex: 1,
+    fontSize: 14,
+    color: "#6B7280",
+  },
+  notesInputContainer: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: "#F9FAFB",
+  },
+  notesInput: {
+    fontSize: 14,
+    color: "#374151",
+    minHeight: 60,
+    textAlignVertical: "top",
+  },
+  notesActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 8,
+    marginTop: 8,
+  },
+  notesClearButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  notesClearText: {
+    fontSize: 14,
+    color: "#6B7280",
+  },
+  notesOkButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: "#DC2626",
+  },
+  notesOkText: {
+    fontSize: 14,
+    color: "#FFFFFF",
+    fontWeight: "600",
+  },
+
   section: {
     marginTop: 12,
     backgroundColor: "#FFFFFF",
