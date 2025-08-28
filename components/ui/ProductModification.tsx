@@ -10,6 +10,7 @@ import {
   Switch,
   StyleSheet,
   TextInput,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import {
@@ -340,7 +341,6 @@ const ProductModification: React.FC<ProductModificationProps> = ({
           <View
             style={[
               styles.footerContainer,
-              { paddingBottom: 16 + insets.bottom },
             ]}>
             <View style={styles.flexItem}>
               <QuantitySelector value={quantity} onChange={setQuantity} />
@@ -368,6 +368,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#E5E7EB",
     backgroundColor: "#FFFFFF",
+    paddingTop: Platform.OS === "android" ? 50 : 12,
   },
   headerBack: { marginRight: 12 },
   headerTitle: { fontSize: 18, fontWeight: "600" },
@@ -551,6 +552,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     flexDirection: "row",
     gap: 16,
+    paddingBottom: Platform.OS === "android" ? 50 : 12,
   },
   flexItem: { flex: 1 },
   saveButton: {

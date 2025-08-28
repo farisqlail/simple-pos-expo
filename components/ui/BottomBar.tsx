@@ -7,6 +7,7 @@ import {
   StyleSheet,
   ViewStyle,
   StyleProp,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -40,12 +41,9 @@ const BottomBar: React.FC<BottomBarProps> = ({
         style,
       ]}
       // accessibility
-      accessibilityRole="toolbar"
-    >
+      accessibilityRole="toolbar">
       <View style={{ gap: 4 }}>
-        <Text style={styles.itemCount}>
-          {itemCount} item
-        </Text>
+        <Text style={styles.itemCount}>{itemCount} item</Text>
         <Text style={styles.totalText}>{formatCurrency(total)}</Text>
       </View>
 
@@ -56,8 +54,7 @@ const BottomBar: React.FC<BottomBarProps> = ({
         disabled={disabled}
         accessibilityRole="button"
         accessibilityLabel={buttonText}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      >
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
         <Text style={styles.completeButtonText}>{buttonText}</Text>
       </TouchableOpacity>
     </View>
@@ -69,7 +66,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 16,
     right: 16,
-    // bottom ditentukan dinamis via insets di atas
+    paddingBottom: Platform.OS === "android" ? 50 : 12,
     backgroundColor: "#B71C1C",
     borderRadius: 12,
     flexDirection: "row",
