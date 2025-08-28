@@ -15,9 +15,17 @@ const RED = "#B81D1D";
 const R = (n: number) =>
   `Rp ${n.toLocaleString("id-ID", { maximumFractionDigits: 0 })}`;
 
-const Badge = ({ label }: { label: string }) => (
-  <View style={styles.badge}>
-    <Text style={styles.badgeText}>{label}</Text>
+const Badge = ({ 
+  label, 
+  style, 
+  textStyle 
+}: { 
+  label: string;
+  style?: any;
+  textStyle?: any;
+}) => (
+  <View style={[styles.badge, style]}>
+    <Text style={[styles.badgeText, textStyle]}>{label}</Text>
   </View>
 );
 
@@ -41,6 +49,20 @@ const QtyControl = ({
   </View>
 );
 
+// Komponen untuk menampilkan toppings dengan styling yang lebih baik
+const ToppingsDisplay = ({ toppings }: { toppings: string[] }) => (
+  <View style={styles.toppingsContainer}>
+    <Text style={styles.detailLabel}>Topping: </Text>
+    <View style={styles.toppingsWrap}>
+      {toppings.map((topping, index) => (
+        <View key={index} style={styles.toppingChip}>
+          <Text style={styles.toppingText}>{topping}</Text>
+        </View>
+      ))}
+    </View>
+  </View>
+);
+
 const ItemCard = ({
   item,
   onDec,
@@ -56,6 +78,7 @@ const ItemCard = ({
 }) => {
   const unitTotal = item.unitBasePrice + item.unitAddonsPrice;
   const hasToppings = !!item.note?.toppings?.length;
+  const orderType = item.note?.takeaway ? "Takeaway" : "Dine In";
 
   // Fungsi untuk konfirmasi hapus item
   const handleRemove = () => {
@@ -82,37 +105,47 @@ const ItemCard = ({
         <Text style={styles.cardTitle} numberOfLines={1}>
           {item.name}
         </Text>
-        {item.note?.takeaway ? <Badge label="Takeaway" /> : null}
+        <View style={styles.badgesContainer}>
+          <Badge 
+            label={orderType} 
+            style={item.note?.takeaway ? styles.takeawayBadge : styles.dineInBadge}
+            textStyle={item.note?.takeaway ? styles.takeawayBadgeText : styles.dineInBadgeText}
+          />
+          {hasToppings && (
+            <Badge label={`+${item.note!.toppings!.length} Topping`} />
+          )}
+        </View>
       </View>
 
       <Text style={styles.cardPrice}>{R(unitTotal)}</Text>
 
+      {/* Informasi Size dan Sugar */}
       <View style={styles.detailRow}>
         {item.note?.size ? (
           <Text style={styles.detailText}>
-            <Text style={styles.detailLabel}>Ukuran Cup </Text>
+            <Text style={styles.detailLabel}>Ukuran: </Text>
             <Text style={styles.detailStrong}>{item.note.size}</Text>
           </Text>
         ) : null}
         {item.note?.sugar ? (
           <Text style={[styles.detailText, { marginLeft: 12 }]}>
-            <Text style={styles.detailLabel}>Takaran Gula </Text>
+            <Text style={styles.detailLabel}>Gula: </Text>
             <Text style={styles.detailStrong}>{item.note.sugar}</Text>
           </Text>
         ) : null}
       </View>
 
-      {hasToppings ? (
-        <Text style={[styles.detailText, { marginTop: 6 }]}>
-          <Text style={styles.detailLabel}>Topping </Text>
-          <Text style={styles.detailStrong}>
-            {item.note!.toppings!.join(", ")}
-          </Text>
-        </Text>
-      ) : null}
+      {/* Menampilkan Toppings dengan styling yang lebih baik */}
+      {hasToppings && (
+        <ToppingsDisplay toppings={item.note!.toppings!} />
+      )}
 
+      {/* Catatan khusus */}
       {item.note?.message ? (
-        <Text style={styles.noteLine}>• {item.note.message}</Text>
+        <View style={styles.noteContainer}>
+          <Text style={styles.noteLabel}>Catatan:</Text>
+          <Text style={styles.noteMessage}>{item.note.message}</Text>
+        </View>
       ) : null}
 
       <View style={styles.actionsRow}>
@@ -220,10 +253,30 @@ const FloatingCartSummary: React.FC<Props> = ({
                     <View style={styles.summaryItemLeft}>
                       <Text style={styles.summaryItemName} numberOfLines={1}>
                         {item.name}
+                        {item.note?.toppings?.length ? 
+                          ` (+${item.note.toppings.length} topping)` : ''
+                        }
                       </Text>
-                      <Text style={styles.summaryItemPrice}>
-                        {R(item.unitBasePrice + item.unitAddonsPrice)}
-                      </Text>
+                      <View style={styles.summaryMetaRow}>
+                        <Text style={styles.summaryItemPrice}>
+                          {R(item.unitBasePrice + item.unitAddonsPrice)}
+                        </Text>
+                        <Text style={styles.summaryOrderType}>
+                          • {item.note?.takeaway ? "Takeaway" : "Dine In"}
+                        </Text>
+                      </View>
+                      {/* Menampilkan toppings dalam summary */}
+                      {item.note?.toppings?.length ? (
+                        <Text style={styles.summaryToppings} numberOfLines={1}>
+                          {item.note.toppings.join(", ")}
+                        </Text>
+                      ) : null}
+                      {/* Menampilkan catatan dalam summary */}
+                      {item.note?.message ? (
+                        <Text style={styles.summaryNote} numberOfLines={1}>
+                          "{item.note.message}"
+                        </Text>
+                      ) : null}
                     </View>
                     <View style={styles.summaryItemActions}>
                       <TouchableOpacity
@@ -398,6 +451,28 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   summaryItemPrice: { fontSize: 12, color: "#6b7280", fontWeight: "500" },
+  summaryMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  summaryOrderType: {
+    fontSize: 11,
+    color: "#9ca3af",
+    fontWeight: "500",
+  },
+  summaryToppings: {
+    fontSize: 11,
+    color: "#9ca3af",
+    fontStyle: "italic",
+    marginTop: 2,
+  },
+  summaryNote: {
+    fontSize: 11,
+    color: "#7c3aed",
+    fontStyle: "italic",
+    marginTop: 1,
+  },
   summaryItemActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   summaryQtyBtn: {
     backgroundColor: "#FEE2E2",
@@ -470,6 +545,10 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 8,
   },
+  badgesContainer: {
+    flexDirection: "row",
+    gap: 6,
+  },
   badge: {
     backgroundColor: "#FEE2E2",
     paddingHorizontal: 8,
@@ -477,12 +556,85 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   badgeText: { color: RED, fontSize: 11, fontWeight: "700" },
+  
+  // Badge styling untuk Dine In dan Takeaway
+  takeawayBadge: {
+    backgroundColor: "#FEF3C7",
+    borderWidth: 1,
+    borderColor: "#F59E0B",
+  },
+  takeawayBadgeText: {
+    color: "#D97706",
+  },
+  dineInBadge: {
+    backgroundColor: "#DBEAFE",
+    borderWidth: 1,
+    borderColor: "#3B82F6",
+  },
+  dineInBadgeText: {
+    color: "#1D4ED8",
+  },
   cardPrice: { marginTop: 2, color: "#374151", fontWeight: "700" },
   detailRow: { flexDirection: "row", marginTop: 8, flexWrap: "wrap" },
   detailText: { color: "#6B7280", fontSize: 12 },
   detailLabel: { color: "#6B7280" },
   detailStrong: { color: "#111827", fontWeight: "600" },
-  noteLine: { marginTop: 6, fontSize: 12, color: "#6B7280" },
+  
+  // Styling untuk toppings
+  toppingsContainer: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    flexWrap: "wrap",
+  },
+  toppingsWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+    flex: 1,
+  },
+  toppingChip: {
+    backgroundColor: "#F3F4F6",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  toppingText: {
+    fontSize: 11,
+    color: "#374151",
+    fontWeight: "500",
+  },
+  
+  // Styling untuk note/catatan
+  noteContainer: {
+    marginTop: 8,
+    backgroundColor: "#F9FAFB",
+    padding: 8,
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: "#7C3AED",
+  },
+  noteLabel: {
+    fontSize: 11,
+    color: "#6B7280",
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  noteMessage: {
+    fontSize: 12,
+    color: "#374151",
+    fontStyle: "italic",
+    lineHeight: 16,
+  },
+  
+  noteLine: { 
+    marginTop: 6, 
+    fontSize: 12, 
+    color: "#6B7280",
+    fontStyle: "italic",
+  },
 
   actionsRow: {
     marginTop: 10,

@@ -66,7 +66,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 16,
     right: 16,
-    paddingBottom: Platform.OS === "android" ? 50 : 12,
+    marginBottom: Platform.OS === "android" ? 20 : 12,
     backgroundColor: "#B71C1C",
     borderRadius: 12,
     flexDirection: "row",

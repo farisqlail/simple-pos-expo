@@ -23,6 +23,118 @@ import { createResource } from "@/lib/api/fetch";
 
 const formatCurrency = (value: number) => `Rp ${value.toLocaleString("id-ID")}`;
 
+// Komponen untuk menampilkan badge
+const Badge = ({ 
+  label, 
+  type = "default" 
+}: { 
+  label: string;
+  type?: "takeaway" | "dinein" | "default";
+}) => {
+  const getBadgeStyle = () => {
+    switch (type) {
+      case "takeaway":
+        return { backgroundColor: "#FEF3C7", borderColor: "#F59E0B" };
+      case "dinein":
+        return { backgroundColor: "#DBEAFE", borderColor: "#3B82F6" };
+      default:
+        return { backgroundColor: "#FEE2E2", borderColor: "#F87171" };
+    }
+  };
+
+  const getBadgeTextStyle = () => {
+    switch (type) {
+      case "takeaway":
+        return { color: "#D97706" };
+      case "dinein":
+        return { color: "#1D4ED8" };
+      default:
+        return { color: "#DC2626" };
+    }
+  };
+
+  return (
+    <View style={[styles.badge, getBadgeStyle()]}>
+      <Text style={[styles.badgeText, getBadgeTextStyle()]}>
+        {label}
+      </Text>
+    </View>
+  );
+};
+
+// Komponen untuk item detail
+const ItemDetail = ({ item }: { item: any }) => {
+  const unitTotal = item.unitBasePrice + item.unitAddonsPrice;
+  const lineTotal = unitTotal * item.quantity;
+  const orderType = item.note?.takeaway ? "takeaway" : "dinein";
+  const orderTypeLabel = item.note?.takeaway ? "Takeaway" : "Dine In";
+
+  return (
+    <View style={styles.itemContainer}>
+      {/* Header with name and badges */}
+      <View style={styles.itemHeader}>
+        <Text style={styles.itemName} numberOfLines={2}>
+          {item.name}
+        </Text>
+        <View style={styles.badgesContainer}>
+          <Badge label={orderTypeLabel} type={orderType} />
+          {item.note?.toppings?.length > 0 && (
+            <Badge label={`+${item.note.toppings.length} Topping`} />
+          )}
+        </View>
+      </View>
+
+      {/* Quantity and price */}
+      <View style={styles.itemMeta}>
+        <Text style={styles.itemQuantity}>
+          {item.quantity}x @ {formatCurrency(unitTotal)}
+        </Text>
+        <Text style={styles.itemTotal}>
+          {formatCurrency(lineTotal)}
+        </Text>
+      </View>
+
+      {/* Details row */}
+      <View style={styles.itemDetailsRow}>
+        {item.note?.size && (
+          <Text style={styles.itemDetail}>
+            <Text style={styles.detailLabel}>Ukuran: </Text>
+            <Text style={styles.detailValue}>{item.note.size}</Text>
+          </Text>
+        )}
+        {item.note?.sugar && (
+          <Text style={[styles.itemDetail, { marginLeft: 12 }]}>
+            <Text style={styles.detailLabel}>Gula: </Text>
+            <Text style={styles.detailValue}>{item.note.sugar}</Text>
+          </Text>
+        )}
+      </View>
+
+      {/* Toppings */}
+      {item.note?.toppings?.length > 0 && (
+        <View style={styles.toppingsSection}>
+          <Text style={styles.detailLabel}>Topping: </Text>
+          <View style={styles.toppingsContainer}>
+            {item.note.toppings.map((topping: string, index: number) => (
+              <View key={index} style={styles.toppingChip}>
+                <Text style={styles.toppingText}>{topping}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* Notes */}
+      {item.note?.message && (
+        <View style={styles.noteContainer}>
+          <Text style={styles.noteLabel}>Catatan:</Text>
+          <Text style={styles.noteText}>"{item.note.message}"</Text>
+        </View>
+      )}
+    </View>
+  );
+};
+
 const Checkout = () => {
   const router = useRouter();
   const items = useCartStore((s) => s.items);
@@ -90,6 +202,18 @@ const Checkout = () => {
 
       const product_list = items.map((it, idx) => {
         const unit = it.unitBasePrice + it.unitAddonsPrice;
+        
+        // Compile note dengan semua informasi
+        let noteDetails = [];
+        if (it.note?.size) noteDetails.push(`Ukuran: ${it.note.size}`);
+        if (it.note?.sugar) noteDetails.push(`Gula: ${it.note.sugar}`);
+        if (it.note?.toppings?.length) {
+          noteDetails.push(`Topping: ${it.note.toppings.join(", ")}`);
+        }
+        if (it.note?.message) noteDetails.push(`Catatan: ${it.note.message}`);
+        
+        const compiledNote = noteDetails.join(" | ");
+
         return {
           indx: idx + 1,
           prod_id: String(it.prodId),
@@ -98,7 +222,7 @@ const Checkout = () => {
           prod_disc: "",
           prod_qty: it.quantity,
           prod_total: unit * it.quantity,
-          prod_note: it.note?.message ?? "",
+          prod_note: compiledNote,
           modifiers: [],
           is_takeaway: !!it.note?.takeaway,
           discount_tag: 0,
@@ -211,20 +335,11 @@ const Checkout = () => {
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>RINGKASAN BELANJA</Text>
 
-            {items.map((it) => {
-              const line =
-                (it.unitBasePrice + it.unitAddonsPrice) * it.quantity;
-              return (
-                <View key={it.id} style={{ marginBottom: 6 }}>
-                  <Text style={{ fontWeight: "600", color: "#111827" }}>
-                    {it.name} × {it.quantity}
-                  </Text>
-                  <Text style={{ color: "#6b7280", fontSize: 12 }}>
-                    {formatCurrency(line)}
-                  </Text>
-                </View>
-              );
-            })}
+            {items.map((it) => (
+              <ItemDetail key={it.id} item={it} />
+            ))}
+
+            <View style={styles.divider} />
 
             <View style={styles.row}>
               <Text>Subtotal</Text>
@@ -302,13 +417,144 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  sectionTitle: { fontSize: 12, color: "#6b7280", marginBottom: 8 },
+  sectionTitle: { 
+    fontSize: 12, 
+    color: "#6b7280", 
+    marginBottom: 12,
+    fontWeight: "600",
+    letterSpacing: 0.5,
+  },
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginVertical: 2,
   },
   bold: { fontWeight: "bold" },
+  divider: {
+    height: 1,
+    backgroundColor: "#e5e7eb",
+    marginVertical: 12,
+  },
+  
+  // Item styling
+  itemContainer: {
+    backgroundColor: "#fafafa",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#f0f0f0",
+  },
+  itemHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 8,
+  },
+  itemName: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#111827",
+    flex: 1,
+    marginRight: 8,
+  },
+  badgesContainer: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  badge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  itemMeta: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  itemQuantity: {
+    fontSize: 13,
+    color: "#6b7280",
+    fontWeight: "500",
+  },
+  itemTotal: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  itemDetailsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginBottom: 8,
+  },
+  itemDetail: {
+    fontSize: 12,
+    color: "#6b7280",
+  },
+  detailLabel: {
+    color: "#9ca3af",
+  },
+  detailValue: {
+    color: "#374151",
+    fontWeight: "500",
+  },
+  
+  // Toppings styling
+  toppingsSection: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 8,
+    flexWrap: "wrap",
+  },
+  toppingsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+    flex: 1,
+  },
+  toppingChip: {
+    backgroundColor: "#f3f4f6",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+  },
+  toppingText: {
+    fontSize: 11,
+    color: "#374151",
+    fontWeight: "500",
+  },
+  
+  // Note styling
+  noteContainer: {
+    backgroundColor: "#f0f9ff",
+    borderLeftWidth: 3,
+    borderLeftColor: "#0ea5e9",
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 4,
+  },
+  noteLabel: {
+    fontSize: 11,
+    color: "#0369a1",
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  noteText: {
+    fontSize: 12,
+    color: "#0c4a6e",
+    fontStyle: "italic",
+    lineHeight: 16,
+  },
+  
+  // Payment styling
   inputWrapper: {
     flexDirection: "row",
     alignItems: "center",

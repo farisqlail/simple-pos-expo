@@ -1,4 +1,4 @@
-// app/receipt/index.tsx - Updated with fixed bottom bar positioning
+// app/receipt/index.tsx - Updated with item details (jenis, topping, catatan) + fixed bottom bar positioning
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
@@ -11,9 +11,7 @@ import {
   Alert,
   Platform,
 } from "react-native";
-import Constants from "expo-constants";
 import { SafeAreaView } from "react-native-safe-area-context";
-
 import { useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -42,6 +40,74 @@ const RowBetween = ({
     </Text>
   </View>
 );
+
+const toArrayOfStrings = (val: any): string[] => {
+  if (!val) return [];
+  if (Array.isArray(val)) {
+    // array string atau array object {name, qty}
+    return val
+      .map((x) => {
+        if (x == null) return null;
+        if (typeof x === "string") return x;
+        if (typeof x === "object") {
+          const nm =
+            x.name || x.nm || x.nama || x.title || x.label || x.kode || x.kd;
+          const q = x.qty || x.quantity || x.jml || x.jumlah;
+          return nm ? (q ? `${nm} x${q}` : `${nm}`) : null;
+        }
+        return String(x);
+      })
+      .filter(Boolean) as string[];
+  }
+  if (typeof val === "object") {
+    // bisa object {t1:true,t2:false} atau {id:nama}
+    const entries = Object.entries(val)
+      .filter(([_, v]) => v) // ambil yang truthy
+      .map(([k, v]) => (typeof v === "string" ? v : k));
+    return entries.length ? entries : [];
+  }
+  // string tunggal
+  return [String(val)];
+};
+
+const normalizeJenis = (d: any): string | undefined => {
+  const raw =
+    d?.note?.takeaway === true
+      ? "takeaway"
+      : d?.takeaway === true
+      ? "takeaway"
+      : d?.jenis_pesanan || d?.order_type || d?.jenis || d?.note?.jenis;
+
+  if (!raw) return undefined;
+  const s = String(raw).toLowerCase();
+  if (["dine-in", "dine in", "makan ditempat", "dinein"].includes(s))
+    return "Dine-in";
+  if (["takeaway", "take away", "bungkus", "take-out", "takeout"].includes(s))
+    return "Takeaway";
+  return s.charAt(0).toUpperCase() + s.slice(1);
+};
+
+const ambilCatatan = (d: any): string | undefined => {
+  const v =
+    d?.note?.message ||
+    d?.note?.catatan ||
+    d?.catatan ||
+    d?.keterangan ||
+    d?.note;
+  return v != null ? String(v) : undefined;
+};
+
+const ambilTopping = (d: any): string[] => {
+  const merged = [
+    ...toArrayOfStrings(d?.note?.toppings),
+    ...toArrayOfStrings(d?.toppings),
+    ...toArrayOfStrings(d?.addons),
+    ...toArrayOfStrings(d?.addon_names),
+  ].filter(Boolean) as string[];
+
+  // hilangkan duplikat & kosong
+  return Array.from(new Set(merged)).filter((s) => String(s).trim().length > 0);
+};
 
 export default function ReceiptScreen() {
   const router = useRouter();
@@ -133,7 +199,6 @@ export default function ReceiptScreen() {
       setActiveMac(mac);
       setPrinterOpen(false);
 
-      // Test connection immediately
       Alert.alert(
         "Test Printer",
         "Apakah Anda ingin test print untuk memverifikasi koneksi?",
@@ -211,7 +276,6 @@ export default function ReceiptScreen() {
         {
           text: "Coba Lagi",
           onPress: () => {
-            // Disconnect and try again
             PrinterService.disconnect();
             setTimeout(() => handlePrint(), 1000);
           },
@@ -278,13 +342,40 @@ export default function ReceiptScreen() {
       data?.created_at ||
       new Date().toLocaleString("id-ID");
 
-    const rawDetails = Array.isArray(data?.details) ? data.details : [];
-    const items = rawDetails.map((d: any) => ({
-      name: d?.nmbrg || "-",
-      price: Number(d?.totals ?? d?.hgsatmkt ?? 0),
-      qty: Number(d?.qty ?? 1),
-      details: undefined,
-    }));
+    const rawDetails = Array.isArray(data?.details)
+      ? data.details
+      : Array.isArray(data?.detail)
+      ? data.detail
+      : Array.isArray(data?.items)
+      ? data.items
+      : [];
+
+    const items = rawDetails.map((d: any) => {
+      const name = d?.nmbrg || d?.name || "-";
+      const price = Number(
+        d?.totals ?? d?.hgsatmkt ?? d?.total ?? d?.price ?? 0
+      );
+      const qty = Number(d?.qty ?? d?.quantity ?? 1);
+
+      const jenis = normalizeJenis(d);
+      const toppingsArr = ambilTopping(d);
+      const catatan = ambilCatatan(d);
+
+      const parts: string[] = [];
+      if (jenis) parts.push(`Jenis: ${jenis}`);
+      if (toppingsArr.length) parts.push(`Topping: ${toppingsArr.join(", ")}`);
+      if (catatan) parts.push(`Catatan: ${catatan}`);
+
+      return {
+        name,
+        price,
+        qty,
+        jenis,
+        toppings: toppingsArr,
+        note: catatan,
+        details: parts.length ? parts.join(" • ") : undefined,
+      };
+    });
 
     const subtotal = rawDetails.reduce(
       (acc: number, d: any) => acc + Number(d?.totals ?? 0),
@@ -354,11 +445,10 @@ export default function ReceiptScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView 
+      <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
+        showsVerticalScrollIndicator={false}>
         <View style={styles.successIcon}>
           <Ionicons name="checkmark-circle" size={70} color="#4CAF50" />
         </View>
@@ -394,11 +484,7 @@ export default function ReceiptScreen() {
               valueColor="red"
             />
           )}
-          <RowBetween
-            label="Total Bayar"
-            value={formatCurrency(total)}
-            bold
-          />
+          <RowBetween label="Total Bayar" value={formatCurrency(total)} bold />
           <RowBetween
             label="Uang Diterima"
             value={formatCurrency(amountReceived)}
@@ -418,9 +504,33 @@ export default function ReceiptScreen() {
                 label={`${item.qty}x ${item.name}`}
                 value={formatCurrency(item.price)}
               />
+
+              {/* tampilkan gabungan jika ada */}
               {item.details && (
                 <Text style={styles.itemDetails}>{item.details}</Text>
               )}
+
+              {/* fallback: tampilkan pecahan per baris */}
+              {!item.details &&
+                (item.jenis || item.toppings?.length > 0 || item.note) && (
+                  <View style={styles.subDetails}>
+                    {item.jenis && (
+                      <Text style={styles.itemDetails}>
+                        Jenis: {item.jenis}
+                      </Text>
+                    )}
+                    {item.toppings?.length > 0 && (
+                      <Text style={styles.itemDetails}>
+                        Topping: {item.toppings.join(", ")}
+                      </Text>
+                    )}
+                    {item.note && (
+                      <Text style={styles.itemDetails}>
+                        Catatan: {item.note}
+                      </Text>
+                    )}
+                  </View>
+                )}
             </View>
           ))}
         </View>
@@ -478,8 +588,7 @@ export default function ReceiptScreen() {
                     Tidak ada perangkat terpasang.
                   </Text>
                   <Text style={styles.emptySubText}>
-                    Pastikan printer sudah dipasangkan di pengaturan
-                    Bluetooth.
+                    Pastikan printer sudah dipasangkan di pengaturan Bluetooth.
                   </Text>
                 </View>
               ) : (
@@ -495,9 +604,7 @@ export default function ReceiptScreen() {
                       <Text style={styles.deviceName}>
                         {device.name || "(Tanpa nama)"}
                       </Text>
-                      <Text style={styles.deviceAddress}>
-                        {device.address}
-                      </Text>
+                      <Text style={styles.deviceAddress}>{device.address}</Text>
                       {activeMac === device.address && (
                         <Text style={styles.activeLabel}>Aktif</Text>
                       )}
@@ -552,24 +659,25 @@ export default function ReceiptScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: "#f5f5f5",
   },
+  subDetails: { marginTop: 2 },
   centerContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: 16,
   },
   scrollView: {
     flex: 1,
   },
-  scrollContent: { 
-    padding: 16, 
-    paddingBottom: 20, // Reduced padding since we're using flex layout
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 20,
   },
-  successIcon: { 
-    alignItems: "center", 
-    marginTop: 20, // Reduced margin
+  successIcon: {
+    alignItems: "center",
+    marginTop: 20,
   },
   successText: {
     textAlign: "center",
@@ -615,25 +723,16 @@ const styles = StyleSheet.create({
   sectionTitle: { fontWeight: "bold", marginBottom: 8 },
   itemWrapper: { marginBottom: 10 },
   itemDetails: { fontSize: 12, color: "#666", marginTop: 2 },
-  
+
   // Updated bottom bar styles - no longer absolute positioned
   bottomBar: {
     flexDirection: "row",
     padding: 12,
-    paddingBottom: Platform.OS === 'android' ? 16 : 12,
+    paddingBottom: Platform.OS === "android" ? 16 : 12,
     backgroundColor: "#fff",
     borderTopWidth: 1,
     borderTopColor: "#eee",
-    // Shadow for better separation
-    // shadowColor: "#000",
-    // shadowOffset: {
-    //   width: 0,
-    //   height: -2,
-    // },
-    // shadowOpacity: 0.1,
-    // shadowRadius: 3,
-    // elevation: 5,
-    height: "auto"
+    height: "auto",
   },
   printButton: {
     flex: 1,
@@ -646,8 +745,8 @@ const styles = StyleSheet.create({
     marginRight: 8,
     gap: 8,
   },
-  printText: { 
-    color: "#DA2424", 
+  printText: {
+    color: "#DA2424",
     fontWeight: "bold",
     fontSize: 14,
   },
@@ -661,8 +760,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
   },
-  newTransactionText: { 
-    color: "#fff", 
+  newTransactionText: {
+    color: "#fff",
     fontWeight: "bold",
     fontSize: 14,
   },

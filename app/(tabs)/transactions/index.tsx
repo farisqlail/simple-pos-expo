@@ -291,6 +291,8 @@ const TransactionScreen = () => {
     toppings?: string[];
     quantity: number;
     total: number;
+    takeaway?: boolean; // Add this
+    notes?: string; // Add this
   }) => {
     if (!selectedProduct) return;
 
@@ -299,9 +301,12 @@ const TransactionScreen = () => {
     const perUnit = Math.round(mods.total / Math.max(mods.quantity, 1));
     const unitAddons = Math.max(perUnit - base, 0);
 
+    // Include takeaway status in the unique key
     const key = `${selectedProduct.productId}|${selectedProduct.name}|${
       mods.size || ""
-    }|${mods.sugar || ""}|${(mods.toppings || []).sort().join(",")}`;
+    }|${mods.sugar || ""}|${(mods.toppings || []).sort().join(",")}|${
+      mods.takeaway ? "takeaway" : "dinein"
+    }`;
 
     addItem({
       id: key,
@@ -314,13 +319,14 @@ const TransactionScreen = () => {
         size: mods.size,
         sugar: mods.sugar,
         toppings: mods.toppings,
-        takeaway: true,
+        takeaway: mods.takeaway || false, // Use the actual value from modifications
+        message: mods.notes?.trim() || undefined, // Map notes to message field
       },
     });
 
     setShowModification(false);
   };
-
+  
   // Handle scroll untuk infinite scroll
   const handleScroll = useCallback(
     (event: any) => {
