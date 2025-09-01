@@ -265,6 +265,7 @@ export default function ReceiptScreen() {
         amountReceived,
         change,
         items,
+        storeLogoUrl: storeLogo,   
       };
 
       await PrinterService.printReceipt(activeMac, data);

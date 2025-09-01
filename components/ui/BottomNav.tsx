@@ -93,7 +93,7 @@ const BottomNav: React.FC<BottomNavProps> = memo(({
           shadowOpacity: 0.1,
           shadowRadius: 3.84,
           elevation: 5,
-          paddingBottom: 30,
+          paddingBottom: 50,
         },
         style,
       ]}
