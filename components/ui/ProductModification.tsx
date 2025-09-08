@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -132,15 +132,39 @@ const ProductModification: React.FC<ProductModificationProps> = ({
 }) => {
   const insets = useSafeAreaInsets();
 
+  // State untuk semua input
   const [selectedSize, setSelectedSize] = useState(sizeOptions[0]?.name || "");
-  const [selectedSugar, setSelectedSugar] = useState(
-    sugarOptions[0]?.name || ""
-  );
+  const [selectedSugar, setSelectedSugar] = useState(sugarOptions[0]?.name || "");
   const [selectedToppings, setSelectedToppings] = useState<string[]>([]);
   const [quantity, setQuantity] = useState(1);
   const [isTakeaway, setIsTakeaway] = useState(false);
   const [notes, setNotes] = useState("");
   const [showNotesInput, setShowNotesInput] = useState(false);
+
+  // Fungsi untuk reset semua state ke nilai default
+  const resetAllStates = () => {
+    setSelectedSize(sizeOptions[0]?.name || "");
+    setSelectedSugar(sugarOptions[0]?.name || "");
+    setSelectedToppings([]);
+    setQuantity(1);
+    setIsTakeaway(false);
+    setNotes("");
+    setShowNotesInput(false);
+  };
+
+  // Reset state ketika modal dibuka atau ditutup
+  useEffect(() => {
+    if (isVisible) {
+      // Reset ketika modal dibuka (opsional, bisa dihapus jika tidak diinginkan)
+      resetAllStates();
+    }
+  }, [isVisible, sizeOptions, sugarOptions]);
+
+  // Handler untuk menutup modal dengan reset
+  const handleClose = () => {
+    resetAllStates();
+    onClose();
+  };
 
   const toggleTopping = (topping: string) => {
     setSelectedToppings((prev) =>
@@ -179,7 +203,15 @@ const ProductModification: React.FC<ProductModificationProps> = ({
     };
 
     onSave?.(modifications);
+    
+    // Reset setelah save
+    resetAllStates();
     onClose();
+  };
+
+  // Handler untuk clear notes
+  const handleClearNotes = () => {
+    setNotes("");
   };
 
   if (!isVisible) return null;
@@ -190,15 +222,25 @@ const ProductModification: React.FC<ProductModificationProps> = ({
         visible={isVisible}
         animationType="slide"
         presentationStyle="fullScreen"
-        statusBarTranslucent>
+        statusBarTranslucent
+        onRequestClose={handleClose} // Android back button
+      >
         <StatusBar barStyle="dark-content" backgroundColor="#fff" />
         <View style={[styles.container, { paddingTop: insets.top }]}>
           {/* Header */}
           <View style={styles.header}>
-            <TouchableOpacity onPress={onClose} style={styles.headerBack}>
+            <TouchableOpacity onPress={handleClose} style={styles.headerBack}>
               <Ionicons name="chevron-back" size={24} color="#000" />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Modifikasi Item</Text>
+            {/* Tambahan tombol reset di header (opsional) */}
+            <TouchableOpacity 
+              onPress={resetAllStates} 
+              style={styles.resetButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="refresh-outline" size={20} color="#6B7280" />
+            </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.scrollArea}>
@@ -299,7 +341,7 @@ const ProductModification: React.FC<ProductModificationProps> = ({
                   <View style={styles.notesActions}>
                     <TouchableOpacity
                       style={styles.notesClearButton}
-                      onPress={() => setNotes("")}>
+                      onPress={handleClearNotes}>
                       <Text style={styles.notesClearText}>Hapus</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -335,13 +377,21 @@ const ProductModification: React.FC<ProductModificationProps> = ({
               multiple
               toggleMultiple={toggleTopping}
             />
+
+            {/* Reset Section - Tombol reset manual jika diperlukan */}
+            <View style={styles.resetSection}>
+              <TouchableOpacity 
+                style={styles.resetAllButton}
+                onPress={resetAllStates}
+              >
+                <Ionicons name="refresh-outline" size={16} color="#6B7280" />
+                <Text style={styles.resetAllText}>Reset Semua Pilihan</Text>
+              </TouchableOpacity>
+            </View>
           </ScrollView>
 
           {/* Footer */}
-          <View
-            style={[
-              styles.footerContainer,
-            ]}>
+          <View style={styles.footerContainer}>
             <View style={styles.flexItem}>
               <QuantitySelector value={quantity} onChange={setQuantity} />
             </View>
@@ -364,6 +414,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between", // Changed to space-between for reset button
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: "#E5E7EB",
@@ -371,7 +422,16 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === "android" ? 50 : 12,
   },
   headerBack: { marginRight: 12 },
-  headerTitle: { fontSize: 18, fontWeight: "600" },
+  headerTitle: { 
+    fontSize: 18, 
+    fontWeight: "600",
+    flex: 1, // Take remaining space
+  },
+  resetButton: {
+    padding: 8,
+    borderRadius: 6,
+    backgroundColor: "#F3F4F6",
+  },
   scrollArea: { flex: 1 },
   productCard: {
     backgroundColor: "#FFFFFF",
@@ -488,6 +548,28 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#FFFFFF",
     fontWeight: "600",
+  },
+
+  // Reset Section
+  resetSection: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+  },
+  resetAllButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 8,
+    backgroundColor: "#FFFFFF",
+  },
+  resetAllText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: "#6B7280",
+    fontWeight: "500",
   },
 
   section: {

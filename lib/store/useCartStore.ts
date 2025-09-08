@@ -1,10 +1,11 @@
+//lib/store/useCartStore
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export type CartItem = {
-  id: string;               // key unik (nama+opsi)
-  prodId: string;           // ⬅️ WAJIB: id produk utk API
+  id: string;              
+  prodId: string;          
   name: string;
   unitBasePrice: number;
   unitAddonsPrice: number;

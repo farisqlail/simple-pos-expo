@@ -24,10 +24,10 @@ import { createResource } from "@/lib/api/fetch";
 const formatCurrency = (value: number) => `Rp ${value.toLocaleString("id-ID")}`;
 
 // Komponen untuk menampilkan badge
-const Badge = ({ 
-  label, 
-  type = "default" 
-}: { 
+const Badge = ({
+  label,
+  type = "default",
+}: {
   label: string;
   type?: "takeaway" | "dinein" | "default";
 }) => {
@@ -55,9 +55,7 @@ const Badge = ({
 
   return (
     <View style={[styles.badge, getBadgeStyle()]}>
-      <Text style={[styles.badgeText, getBadgeTextStyle()]}>
-        {label}
-      </Text>
+      <Text style={[styles.badgeText, getBadgeTextStyle()]}>{label}</Text>
     </View>
   );
 };
@@ -89,9 +87,7 @@ const ItemDetail = ({ item }: { item: any }) => {
         <Text style={styles.itemQuantity}>
           {item.quantity}x @ {formatCurrency(unitTotal)}
         </Text>
-        <Text style={styles.itemTotal}>
-          {formatCurrency(lineTotal)}
-        </Text>
+        <Text style={styles.itemTotal}>{formatCurrency(lineTotal)}</Text>
       </View>
 
       {/* Details row */}
@@ -138,7 +134,6 @@ const ItemDetail = ({ item }: { item: any }) => {
 const Checkout = () => {
   const router = useRouter();
   const items = useCartStore((s) => s.items);
-  const clearCart = useCartStore((s) => s.clear);
 
   const { subtotal, itemCount } = useMemo(() => {
     let sub = 0,
@@ -202,7 +197,7 @@ const Checkout = () => {
 
       const product_list = items.map((it, idx) => {
         const unit = it.unitBasePrice + it.unitAddonsPrice;
-        
+
         // Compile note dengan semua informasi
         let noteDetails = [];
         if (it.note?.size) noteDetails.push(`Ukuran: ${it.note.size}`);
@@ -211,7 +206,7 @@ const Checkout = () => {
           noteDetails.push(`Topping: ${it.note.toppings.join(", ")}`);
         }
         if (it.note?.message) noteDetails.push(`Catatan: ${it.note.message}`);
-        
+
         const compiledNote = noteDetails.join(" | ");
 
         return {
@@ -309,7 +304,6 @@ const Checkout = () => {
         token
       );
 
-      clearCart();
       await AsyncStorage.setItem("tx:last_response", JSON.stringify(resp));
       router.replace({
         pathname: "/receipt",
@@ -357,7 +351,7 @@ const Checkout = () => {
             </View>
           </View>
 
-          <View style={[styles.card, { marginTop: 16 }]}>
+          <View style={[styles.card, { marginTop: 16, marginBottom: 150 }]}>
             <Text style={styles.sectionTitle}>PILIH METODE PEMBAYARAN</Text>
             <View style={styles.inputWrapper}>
               <Ionicons name="card-outline" size={20} color="#6b7280" />
@@ -417,9 +411,9 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  sectionTitle: { 
-    fontSize: 12, 
-    color: "#6b7280", 
+  sectionTitle: {
+    fontSize: 12,
+    color: "#6b7280",
     marginBottom: 12,
     fontWeight: "600",
     letterSpacing: 0.5,
@@ -435,7 +429,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#e5e7eb",
     marginVertical: 12,
   },
-  
+
   // Item styling
   itemContainer: {
     backgroundColor: "#fafafa",
@@ -504,7 +498,7 @@ const styles = StyleSheet.create({
     color: "#374151",
     fontWeight: "500",
   },
-  
+
   // Toppings styling
   toppingsSection: {
     flexDirection: "row",
@@ -531,7 +525,7 @@ const styles = StyleSheet.create({
     color: "#374151",
     fontWeight: "500",
   },
-  
+
   // Note styling
   noteContainer: {
     backgroundColor: "#f0f9ff",
@@ -553,7 +547,7 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     lineHeight: 16,
   },
-  
+
   // Payment styling
   inputWrapper: {
     flexDirection: "row",
