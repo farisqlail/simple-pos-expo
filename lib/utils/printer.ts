@@ -1,8 +1,7 @@
 // lib/printer.ts
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Alert, Platform, PermissionsAndroid } from "react-native";
-import RNBluetoothClassic from "react-native-bluetooth-classic"; // <- library utama & maintained
-// Docs: https://kenjdavidson.github.io/react-native-bluetooth-classic/
+import RNBluetoothClassic from "react-native-bluetooth-classic";
 
 // ===== Types =====
 export type ReceiptItem = {
@@ -10,12 +9,11 @@ export type ReceiptItem = {
   qty: number;
   price: number;
   details?: string;
-
-  // Tambahan agar cocok dengan useCartStore
   note?: {
     size?: string;
     sugar?: string;
-    toppings?: string[];
+    // Dukung string atau objek { name, price }
+    toppings?: Array<string | { name: string; price?: number }>;
     message?: string;
     takeaway?: boolean;
   };
@@ -28,16 +26,26 @@ export type ReceiptData = {
   date: string;
   paymentMethod: string;
   subtotal: number;
+
+  // berbagai kemungkinan field fee
   adminFee?: number;
   service?: number;
+
   total: number;
   amountReceived: number;
   change: number;
   items: ReceiptItem[];
+
+  // opsi-opsi tambahan yang kadang ada di schema lain
+  fees?: Array<{ type: string; name?: string; amount: number }>;
+  meta?: Record<string, any>;
   storeLogoUrl?: string;
 };
 
 const STORAGE_ACTIVE_PRINTER = "printer:active_mac";
+const WIDTH = 32; // 58mm tipikal
+const DEBUG_MODE = false; // set true sementara untuk melihat ringkasan debug di struk
+
 const R = (n: number) =>
   "Rp " + (Number(n) || 0).toLocaleString("id-ID", { maximumFractionDigits: 0 });
 
@@ -51,7 +59,7 @@ const CMD = {
   ALIGN_L: ESC + "a" + "\x00",
   ALIGN_C: ESC + "a" + "\x01",
   FEED: "\n",
-  CUT_FULL: GS + "V" + "\x41" + "\x00", // full cut, jika printer mendukung
+  CUT_FULL: GS + "V" + "\x41" + "\x00",
 };
 
 let activeDevice: { address: string } | null = null;
@@ -63,7 +71,7 @@ async function ensureAndroidBtPermissions() {
   const perms: Array<PermissionsAndroid.Permission> = [
     PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN as any,
     PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT as any,
-    PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION, // beberapa vendor masih mengecek lokasi
+    PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
   ].filter(Boolean);
 
   const statuses = await PermissionsAndroid.requestMultiple(perms);
@@ -73,11 +81,11 @@ async function ensureAndroidBtPermissions() {
   if (denied) throw new Error("Izin Bluetooth ditolak");
 }
 
-const WIDTH = 32; // karakter lebar kertas 58mm tipikal
 const line = (ch = "-") => ch.repeat(WIDTH);
 const padR = (s: string, len: number) =>
   s.length >= len ? s.slice(0, len) : s + " ".repeat(len - s.length);
 const kv = (k: string, v: string) => padR(k, WIDTH - v.length) + v;
+
 const wrap = (text: string, indent = 0) => {
   const space = " ".repeat(indent);
   const max = WIDTH - indent;
@@ -89,12 +97,10 @@ const wrap = (text: string, indent = 0) => {
   for (const w of words) {
     if ((cur + (cur ? " " : "") + w).length > max) {
       if (cur) lines.push(space + cur);
-      // kata panjang melebihi max -> potong paksa
       if (w.length > max) {
         let i = 0;
         while (i < w.length) {
-          const chunk = w.slice(i, i + max);
-          lines.push(space + chunk);
+          lines.push(space + w.slice(i, i + max));
           i += max;
         }
         cur = "";
@@ -109,34 +115,108 @@ const wrap = (text: string, indent = 0) => {
   return lines;
 };
 
-// Build baris "opsi" untuk item berdasarkan note
+// Normalisasi angka aman
+const N = (v: any) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+
+// Ambil fee dari berbagai kemungkinan field
+function extractFees(data: ReceiptData) {
+  // alias-aliasku untuk admin & service
+  const adminAliases = [
+    "adminFee",
+    "admin_fee",
+    "admin",
+    "biaya_admin",
+    "fee",
+  ];
+  const serviceAliases = [
+    "service",
+    "serviceFee",
+    "service_fee",
+    "service_charge",
+    "layanan",
+    "biaya_layanan",
+  ];
+
+  // baca dari root data
+  let admin = 0;
+  let service = 0;
+
+  for (const k of adminAliases) {
+    if ((data as any)[k] != null) {
+      admin = N((data as any)[k]);
+      break;
+    }
+  }
+  for (const k of serviceAliases) {
+    if ((data as any)[k] != null) {
+      service = N((data as any)[k]);
+      break;
+    }
+  }
+
+  // baca dari fees[] jika ada
+  if (Array.isArray(data.fees)) {
+    for (const f of data.fees) {
+      const type = (f.type || f.name || "").toString().toLowerCase();
+      if (type.includes("admin")) admin += N(f.amount);
+      else if (type.includes("service") || type.includes("layanan"))
+        service += N(f.amount);
+    }
+  }
+
+  // baca dari meta umum bila ada
+  if (data.meta && typeof data.meta === "object") {
+    for (const k of Object.keys(data.meta)) {
+      const lk = k.toLowerCase();
+      if (lk.includes("admin")) admin += N((data.meta as any)[k]);
+      if (lk.includes("service") || lk.includes("layanan"))
+        service += N((data.meta as any)[k]);
+    }
+  }
+
+  return { admin, service };
+}
+
+// Build baris opsi item (ASCII safe)
 function buildItemOptionsLines(it: ReceiptItem): string[] {
   const bullets: string[] = [];
 
   const sz = it?.note?.size;
   const sugar = it?.note?.sugar;
-  const tops =
-    it?.note?.toppings && it.note.toppings.length > 0
-      ? it.note.toppings.join(", ")
-      : undefined;
+  const tops = it?.note?.toppings ?? [];
   const msg = it?.note?.message;
   const takeaway = it?.note?.takeaway;
 
-  if (sz) bullets.push(`• Size: ${sz}`);
-  if (sugar) bullets.push(`• Sugar: ${sugar}`);
-  if (tops) bullets.push(`• Toppings: ${tops}`);
-  if (typeof takeaway === "boolean") {
-    bullets.push(`• ${takeaway ? "Takeaway" : "Dine-in"}`);
-  }
-  if (msg) bullets.push(`• Note: ${msg}`);
+  if (sz) bullets.push(`- Size: ${sz}`);
+  if (sugar) bullets.push(`- Sugar: ${sugar}`);
 
-  // Bungkus dengan indent 2 spasi
+  if (Array.isArray(tops) && tops.length > 0) {
+    for (const t of tops) {
+      if (typeof t === "string") {
+        bullets.push(`- Topping: ${t}`);
+      } else if (t && typeof t === "object") {
+        const nm = t.name ?? "Topping";
+        const pr = N(t.price) > 0 ? ` (+${R(N(t.price))})` : "";
+        bullets.push(`- Topping: ${nm}${pr}`);
+      }
+    }
+  }
+
+  if (typeof takeaway === "boolean") {
+    bullets.push(`- ${takeaway ? "Takeaway" : "Dine-in"}`);
+  }
+  if (msg) bullets.push(`- Note: ${msg}`);
+
   return bullets.flatMap((b) => wrap(b, 2));
 }
 
 // helper kecil untuk jeda async
 const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
+// ===== Core Service =====
 export const PrinterService = {
   isAvailable(): boolean {
     return !!RNBluetoothClassic;
@@ -162,12 +242,10 @@ export const PrinterService = {
 
     const enabled = await RNBluetoothClassic.isBluetoothEnabled();
     if (!enabled) {
-      // akan buka dialog enable pada Android
       const ok = await RNBluetoothClassic.requestBluetoothEnabled?.();
       if (ok === false) throw new Error("Bluetooth dimatikan");
     }
 
-    // Ambil perangkat yang sudah paired/bonded
     const bonded = await RNBluetoothClassic.getBondedDevices();
     return bonded.map((d: any) => ({
       name: d.name || d.deviceName || "Unknown Device",
@@ -185,7 +263,6 @@ export const PrinterService = {
   async ensureConnected(mac: string) {
     await ensureAndroidBtPermissions();
 
-    // Jika sudah nyambung dan sama, lewati
     const connected = await RNBluetoothClassic.getConnectedDevices?.();
     const already = (connected || []).find(
       (d: any) => (d.address || d.id) === mac
@@ -195,16 +272,14 @@ export const PrinterService = {
       return;
     }
 
-    // Putuskan yg lama
     try {
       await RNBluetoothClassic.disconnectFromDevice?.(activeDevice?.address);
     } catch {}
 
-    // Connect ke SPP (RFCOMM). Banyak printer ESC/POS pakai ini.
     await RNBluetoothClassic.connectToDevice(mac, {
       CONNECTOR_TYPE: "rfcomm",
       DELIMITER: "\n",
-      DEVICE_CHARSET: "ASCII",
+      DEVICE_CHARSET: "ASCII", // pakai ASCII agar aman di ESC/POS murah
     });
     activeDevice = { address: mac };
   },
@@ -218,25 +293,18 @@ export const PrinterService = {
     }
   },
 
-  // === writeRaw dengan CHUNKING agar tidak terpotong ===
+  // === writeRaw dengan CHUNKING agar tidak terpotong
   async writeRaw(data: string | Uint8Array) {
     if (!activeDevice) throw new Error("Belum terhubung ke printer");
 
-    // Konversi ke string (byte Latin-1 -> string)
     let payload: string;
-    if (typeof data === "string") {
-      payload = data;
-    } else {
-      payload = String.fromCharCode(...data);
-    }
+    if (typeof data === "string") payload = data;
+    else payload = String.fromCharCode(...data);
 
-    // Banyak printer/RFCOMM drop data jika terlalu panjang dalam sekali tulis.
-    // 256–512 byte biasanya aman; pakai 256 agar konservatif.
     const CHUNK_SIZE = 256;
     for (let i = 0; i < payload.length; i += CHUNK_SIZE) {
       const part = payload.slice(i, i + CHUNK_SIZE);
       await RNBluetoothClassic.writeToDevice(activeDevice.address, part);
-      // jeda singkat agar buffer printer sempat memproses
       await delay(8);
     }
   },
@@ -245,10 +313,19 @@ export const PrinterService = {
     if (!this.isAvailable()) throw new Error("Bluetooth module tidak tersedia");
     await this.ensureConnected(mac);
 
+    // Normalisasi fee
+    const { admin, service } = extractFees(data);
+
+    const computedTotal =
+      N(data.subtotal) + N(admin) + N(service);
+
+    const totalToPrint = Number.isFinite(N(data.total))
+      ? N(data.total)
+      : computedTotal;
+
     const chunks: string[] = [];
     const p = (s: string) => chunks.push(s);
 
-    // Infer tipe order dari catatan item
     const inferredOrderType = data.items?.some((it) => it?.note?.takeaway)
       ? "Takeaway"
       : "Dine-in";
@@ -270,34 +347,47 @@ export const PrinterService = {
 
     for (const it of data.items) {
       const left = `${it.qty}x ${it.name}`;
-      const right = R(it.price);
+      const right = R(N(it.price));
       p(`${kv(left, right)}\n`);
 
-      if (it.details) {
-        for (const c of wrap(it.details, 2)) p(`${c}\n`);
-      }
+      if (it.details) for (const c of wrap(it.details, 2)) p(`${c}\n`);
 
       const optLines = buildItemOptionsLines(it);
       for (const c of optLines) p(`${c}\n`);
     }
 
     p(`${line()}\n`);
-    p(`${kv("Subtotal", R(data.subtotal))}\n`);
-    if ((data.adminFee || 0) > 0)
-      p(`${kv("Biaya Admin", `+ ${R(data.adminFee!)}`)}\n`);
-    if ((data.service || 0) > 0)
-      p(`${kv("Service", `+ ${R(data.service!)}`)}\n`);
+    p(`${kv("Subtotal", R(N(data.subtotal)))}\n`);
+    if (N(admin) !== 0) p(`${kv("Biaya Admin", `${admin > 0 ? "+ " : ""}${R(Math.abs(N(admin)))}`)}\n`);
+    if (N(service) !== 0) p(`${kv("Service", `${service > 0 ? "+ " : ""}${R(Math.abs(N(service)))}`)}\n`);
+
     p(CMD.TEXT_2H);
-    p(`${kv("Total", R(data.total))}\n`);
+    p(`${kv("Total", R(totalToPrint))}\n`);
     p(CMD.TEXT_NORMAL);
-    p(`${kv("Uang Diterima", R(data.amountReceived))}\n`);
-    p(`${kv("Kembalian", R(data.change))}\n`);
+    p(`${kv("Uang Diterima", R(N(data.amountReceived)))}\n`);
+    p(`${kv("Kembalian", R(N(data.change)))}\n`);
     p(`${line()}\n`);
     p(CMD.ALIGN_C);
-    p(`Terima kasih 🙏\n`);
-    // feed ekstra agar baris terakhir tidak kepotong sebelum cut
+    p(`Terima kasih\n`);
     p(CMD.FEED + CMD.FEED + CMD.FEED + CMD.FEED);
     p(CMD.CUT_FULL);
+
+    if (DEBUG_MODE) {
+      // Tambahkan blok debug di akhir (opsional)
+      const dbg: string[] = [];
+      dbg.push(CMD.INIT, CMD.ALIGN_L, "DEBUG:\n");
+      dbg.push(`admin=${admin}, service=${service}\n`);
+      dbg.push(`items=${data.items?.length || 0}\n`);
+      try {
+        const first = data.items?.[0];
+        const tcount = Array.isArray(first?.note?.toppings)
+          ? first!.note!.toppings!.length
+          : 0;
+        dbg.push(`firstItemToppings=${tcount}\n`);
+      } catch {}
+      dbg.push(CMD.FEED + CMD.FEED);
+      await this.writeRaw(dbg.join(""));
+    }
 
     await this.writeRaw(chunks.join(""));
   },

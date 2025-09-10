@@ -8,10 +8,11 @@
     "scheme": "risetexpo",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "jsEngine": "hermes",
     "ios": {
       "supportsTablet": true
     },
-     "androidStatusBar": {
+    "androidStatusBar": {
       "translucent": true,
       "backgroundColor": "transparent",
       "barStyle": "light-content"
@@ -48,7 +49,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
-      ]
+      ],
+      "expo-build-properties"
     ],
     "experiments": {
       "typedRoutes": true
