@@ -326,32 +326,7 @@ const Checkout = () => {
         />
 
         <ScrollView contentContainerStyle={{ padding: 16 }}>
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>RINGKASAN BELANJA</Text>
-
-            {items.map((it) => (
-              <ItemDetail key={it.id} item={it} />
-            ))}
-
-            <View style={styles.divider} />
-
-            <View style={styles.row}>
-              <Text>Subtotal</Text>
-              <Text>{formatCurrency(subtotal)}</Text>
-            </View>
-
-            <View style={styles.row}>
-              <Text>Service (10%)</Text>
-              <Text style={{ color: "red" }}>+ {formatCurrency(service)}</Text>
-            </View>
-
-            <View style={styles.row}>
-              <Text style={styles.bold}>Total Bayar</Text>
-              <Text style={styles.bold}>{formatCurrency(totalBayar)}</Text>
-            </View>
-          </View>
-
-          <View style={[styles.card, { marginTop: 16, marginBottom: 150 }]}>
+          <View style={[styles.card, { marginTop: 16 }]}>
             <Text style={styles.sectionTitle}>PILIH METODE PEMBAYARAN</Text>
             <View style={styles.inputWrapper}>
               <Ionicons name="card-outline" size={20} color="#6b7280" />
@@ -385,6 +360,31 @@ const Checkout = () => {
                   </Text>
                 </TouchableOpacity>
               ))}
+            </View>
+          </View>
+
+          <View style={[styles.card, {marginTop: 16, marginBottom: 150}]}>
+            <Text style={styles.sectionTitle}>RINGKASAN BELANJA</Text>
+
+            {items.map((it) => (
+              <ItemDetail key={it.id} item={it} />
+            ))}
+
+            <View style={styles.divider} />
+
+            <View style={styles.row}>
+              <Text>Subtotal</Text>
+              <Text>{formatCurrency(subtotal)}</Text>
+            </View>
+
+            <View style={styles.row}>
+              <Text>Service (10%)</Text>
+              <Text style={{ color: "red" }}>+ {formatCurrency(service)}</Text>
+            </View>
+
+            <View style={styles.row}>
+              <Text style={styles.bold}>Total Bayar</Text>
+              <Text style={styles.bold}>{formatCurrency(totalBayar)}</Text>
             </View>
           </View>
         </ScrollView>
